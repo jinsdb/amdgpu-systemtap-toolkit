@@ -1,0 +1,60 @@
+#!/usr/bin/env stap
+#stap -g callgraph.stp -DSTP_NO_OVERLOAD
+
+@define amdgpu %("/home/huangqu/systemtap-4.1-18.04/debuginfo/amdgpu.ko"%)
+@define amdttm %("/home/huangqu/systemtap-4.1-18.04/debuginfo/amdttm.ko"%)
+@define ttm %("/home/huangqu/systemtap-4.1-18.04/debuginfo/ttm.ko"%)
+
+global start = 0
+function trace(entry_p, extra) {
+    space_cnt = thread_indent_depth(entry_p)
+    if (entry_p>0) {
+        printf("%-*s%s(%s)%s\n",
+             space_cnt,"",
+             ppfunc(),
+             extra,
+		     " {")
+    } else {
+        printf("%-*s%s %s\n",
+              space_cnt, "",
+             "}",
+		     extra)
+    }
+
+}
+
+probe module(@amdgpu).function("*").call,
+      module(@amdttm).function("*").call,
+	  module(@ttm).function("*").call { 
+    
+	if (ppfunc() == "kfd_ioctl") {
+		cmd = register("si")
+		if (cmd == 0x4b16) { //alloc_memory_of_gpu
+		  printf("========================================\n")
+		  printf("        cmd = %x\n", cmd)
+		  printf("========================================\n")
+		  start = 1
+		}
+	}
+    if ((start == 1) && (execname() == "kfdtest")) {	
+        trace(4, $$parms)
+    }
+}
+
+probe module(@amdgpu).function("*").return,
+      module(@amdttm).function("*").return,
+      module(@ttm).function("*").return { 
+      if ((start == 1) && (execname() == "kfdtest")) {
+	      trace(-4, $$return)
+      }
+	
+	  if ((ppfunc() == "kfd_ioctl") && (start == 1)) {
+		 printf("========================================\n")
+		 printf("    kfd_ioctl  end\n")
+		 printf("========================================\n")
+		 start = 0
+	  }
+	
+}
+
+probe begin{printf("Start to collect callgraph...\n")}

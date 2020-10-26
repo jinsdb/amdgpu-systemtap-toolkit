@@ -1,0 +1,31 @@
+# stap -vv devmem_patch.stp -g
+function access_prot(file:long, pfn:long, size:long, vmap:long)
+%{
+    struct file *file = (struct file *)STAP_ARG_file;
+    unsigned long pfn = (unsigned long)STAP_ARG_pfn;
+	unsigned long size= (unsigned long)STAP_ARG_size;
+    pgprot_t *vma_prot= (pgprot_t *)STAP_ARG_vmap;
+    
+  	enum page_cache_mode pcm = _PAGE_CACHE_MODE_WB;
+
+	if (file->f_flags & O_DSYNC)
+		pcm = _PAGE_CACHE_MODE_UC_MINUS;
+
+	*vma_prot = __pgprot((pgprot_val(*vma_prot) & ~_PAGE_CACHE_MASK) |
+			     cachemode2protval(pcm));
+%}
+
+probe kprobe.function("phys_mem_access_prot_allowed").return
+{
+    if (returnval() == 0) {
+        printf("CONFIG_STRICT_DEVMEM is set in kernel config")
+        access_prot(@entry(ulong_arg(1)), @entry(ulong_arg(2)),
+                    @entry(ulong_arg(3)), @entry(ulong_arg(4)))
+    }
+    %{c->kregs->ax = 1%}
+}
+probe kprobe.function("devmem_is_allowed").return
+{
+    printf("%s %s \n", execname(),ppfunc())
+   %{c->kregs->ax = 1%}
+}

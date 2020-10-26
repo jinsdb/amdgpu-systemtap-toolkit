@@ -1,0 +1,141 @@
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+//@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+probe module(@amdgpu).function("pm_map_process_v9").return
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mes_map_process")
+    printf("\npm map process:\n")
+    printf("---------------------------------------------------------\n")
+    printf("header: 0x%08x\n", packet->header->u32All)
+	printf("bitfields2.diq_enable: %d\n", packet->bitfields2->diq_enable)
+	printf("bitfields2.process_quantum: %d\n", packet->bitfields2->process_quantum)
+	printf("bitfields2.pasid: %d\n", packet->bitfields2->pasid)
+	printf("bitfields14.gds_size: %d\n", packet->bitfields14->gds_size)
+	printf("bitfields14.num_gws: %d\n", packet->bitfields14->num_gws)
+	printf("bitfields14.num_oac: %d\n", packet->bitfields14->num_oac)
+	printf("bitfields14.sdma_enable: %d\n", packet->bitfields14->sdma_enable)
+	printf("bitfields14.num_queues: %d\n", packet->bitfields14->num_queues)
+
+	printf("bitfields2.debug_vmid: %d\n", packet->bitfields2->debug_vmid)
+	printf("bitfields2.new_debug: %d\n", packet->bitfields2->new_debug)
+    
+	printf("sh_mem_config: 0x%08x\n", packet->sh_mem_config)
+	printf("sh_mem_bases: 0x%08x\n", packet->sh_mem_bases)
+	printf("sq_shader_tba_lo: 0x%08x\n", packet->sq_shader_tba_lo)
+	printf("sq_shader_tba_hi: 0x%08x\n", packet->sq_shader_tba_hi) 
+	printf("sq_shader_tma_lo: 0x%08x\n", packet->sq_shader_tma_lo) 
+	printf("sq_shader_tma_hi: 0x%08x\n", packet->sq_shader_tma_hi) 
+
+	printf("gds_addr_lo: 0x%08x\n", packet->gds_addr_lo)
+	printf("gds_addr_hi: 0x%08x\n", packet->gds_addr_hi)
+
+	printf("vm_context_page_table_base_addr_lo32: 0x%08x\n", packet->vm_context_page_table_base_addr_lo32)
+	printf("vm_context_page_table_base_addr_hi32: 0x%08x\n", packet->vm_context_page_table_base_addr_hi32)
+}
+
+probe module(@amdgpu).function("pm_runlist_v9").return 
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mes_runlist")
+    printf("\npm runlist:\n")
+    printf("---------------------------------------------------------\n")
+   	printf("header: 0x%08x\n", packet->header->u32All)
+	printf("bitfields4.ib_size: %d\n", packet->bitfields4->ib_size)
+	printf("bitfields4.chain: %d\n", packet->bitfields4->chain)
+	printf("bitfields4.offload_polling: %d\n", packet->bitfields4->offload_polling)
+	printf("bitfields4.valid: %d\n", packet->bitfields4->valid)
+	printf("bitfields4.process_cnt: %d\n", packet->bitfields4->process_cnt)
+	printf("ordinal2: 0x%08x\n", packet->ordinal2)
+	printf("ib_base_hi: 0x%08x\n", packet->ib_base_hi)
+}
+
+probe module(@amdgpu).function("pm_set_resources_vi").return 
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mes_set_resources")
+    printf("\npm set resources:\n")
+    printf("---------------------------------------------------------\n")
+    printf("header: 0x%08x\n", packet->header->u32All)
+
+    printf("bitfields2.queue_type: %d\n",    packet->bitfields2->queue_type) 
+	printf("bitfields2.vmid_mask: 0x%08x\n", packet->bitfields2->vmid_mask)
+	printf("bitfields2.unmap_latency: %d\n", packet->bitfields2->unmap_latency)
+	printf("bitfields7.oac_mask: 0x%08x\n",  packet->bitfields7->oac_mask)
+	printf("bitfields8.gds_heap_base: 0x%08x\n", packet->bitfields8->gds_heap_base)
+	printf("bitfields8.gds_heap_size: %d\n",     packet->bitfields8->gds_heap_size)
+
+	printf("ordinal2: 0x%08x\n", packet->gws_mask_lo)
+	printf("ordinal2: 0x%08x\n", packet->gws_mask_hi) 
+
+	printf("ordinal2: 0x%08x\n", packet->queue_mask_lo)
+	printf("ordinal2: 0x%08x\n", packet->queue_mask_hi)
+   
+}
+
+probe module(@amdgpu).function("pm_map_queues_v9").return 
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mes_map_queues")
+    printf("\npm map queues:\n")
+    printf("---------------------------------------------------------\n")
+    printf("header: 0x%08x\n", packet->header->u32All)
+    printf("bitfields2.num_queues: %d\n", packet->bitfields2->num_queues)
+	printf("bitfields2.queue_sel: %d\n", packet->bitfields2->queue_sel)
+	printf("bitfields2.engine_sel: %d\n", packet->bitfields2->engine_sel)
+	printf("bitfields2.queue_type: %d\n", packet->bitfields2->queue_type)
+	printf("bitfields3.doorbell_offset: 0x%08x\n", packet->bitfields3->doorbell_offset)
+	printf("mqd_addr_lo: 0x%08x\n", packet->mqd_addr_lo)
+	printf("mqd_addr_hi: 0x%08x\n", packet->mqd_addr_hi)
+	printf("wptr_addr_lo: 0x%08x\n", packet->wptr_addr_lo)
+	printf("wptr_addr_hi: 0x%08x\n", packet->wptr_addr_hi)
+}
+
+probe module(@amdgpu).function("pm_unmap_queues_v9").return 
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mes_unmap_queues")
+    printf("\npm unmap queues:\n")
+    printf("---------------------------------------------------------\n")
+    printf("header: 0x%08x\n", packet->header->u32All)
+    printf("bitfields2.engine_sel: %d\n", packet->bitfields2->engine_sel)
+    printf("bitfields2.action: %d\n",     packet->bitfields2->action)
+    printf("bitfields2.queue_sel: %d\n",  packet->bitfields2->queue_sel)
+    printf("bitfields2.num_queues: %d\n", packet->bitfields2->num_queues)
+    printf("bitfields3b.doorbell_offset0: 0x%08x\n", packet->bitfields3b->doorbell_offset0)
+    printf("bitfields3a.pasid: %d\n", packet->bitfields3a->pasid)
+}
+
+probe module(@amdgpu).function("pm_query_status_v9").return 
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mes_query_status")
+    printf("\npm query status:\n")
+    printf("---------------------------------------------------------\n")
+    printf("header: 0x%08x\n", packet->header->u32All)
+    printf("bitfields2.context_id: %d\n",    packet->bitfields2->context_id)
+	printf("bitfields2.interrupt_sel: %d\n", packet->bitfields2->interrupt_sel)
+	printf("bitfields2.command: 0x%08x\n",   packet->bitfields2->command)
+
+	printf("fence_addr_hi: 0x%08x\n", packet->addr_hi)
+	printf("fence_addr_lo: 0x%08x\n", packet->addr_lo)
+	printf("fence_data_hi: 0x%08x\n", packet->data_hi)
+	printf("fence_data_lo: 0x%08x\n", packet->data_lo)
+}
+
+probe module(@amdgpu).function("pm_release_mem_v9").return 
+{
+    packet = &@cast(@entry($buffer), "struct pm4_mec_release_mem")
+    printf("\npm release mem:\n")
+    printf("---------------------------------------------------------\n")
+    printf("header: 0x%08x\n", packet->header->u32All)
+   	printf("bitfields2.event_type: %d\n", packet->bitfields2->event_type)
+	printf("bitfields2.event_index: %d\n", packet->bitfields2->event_index)
+    printf("bitfields2.tcl1_action_ena: %d\n", packet->bitfields2->tcl1_action_ena)
+	printf("bitfields2.tc_action_ena: %d\n", packet->bitfields2->tc_action_ena)
+	printf("bitfields2.cache_policy: %d\n", packet->bitfields2->cache_policy)
+
+	printf("bitfields3.data_sel: %d\n", packet->bitfields3->data_sel)
+	printf("bitfields3.int_sel: %d\n", packet->bitfields3->int_sel)
+
+	printf("bitfields4.address_lo_32b: 0x%08x\n", packet->bitfields4->address_lo_32b)
+	printf("address_hi: 0x%08x\n", packet->address_hi)
+	printf("data_lo: %d\n", packet->data_lo)
+    
+}
+
+

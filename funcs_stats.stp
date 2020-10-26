@@ -1,0 +1,18 @@
+#./kfdtest --gtest_filter=KFDMemoryTest.MemoryAlloc
+global funcs
+probe begin{printf("start stats...\n")}
+
+probe module("amdgpu").function("*"),
+      module("amdttm").function("*"),
+	  module("ttm").function("*"){
+   funcs[ppfunc()]++
+}
+
+probe end{
+  cnt = 0
+  foreach (func in funcs-){
+		printf("%32s : %-d\n", func, funcs[func])
+		cnt++
+  }
+  printf("totals funcs:%d \n", cnt)
+}

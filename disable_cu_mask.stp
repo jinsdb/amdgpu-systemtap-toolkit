@@ -1,0 +1,114 @@
+//@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko"%)
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+function setmask(arr:long)
+%{
+    uint32_t *mask = (uint32_t *)STAP_ARG_arr;
+    mask[0] = 0xfffffffe;    
+    mask[2] = 0xfffffffe;
+    mask[4] = 0xfffffffe;
+    mask[6] = 0xfffffffe;
+%}
+
+global mqd
+probe module(@amdgpu).function("update_mqd")
+{
+    mqd[tid()] = $mqd
+}
+
+probe module(@amdgpu).function("update_mqd").return
+{
+  if (mqd[tid()] == 0)
+     next;
+  m = &@cast(mqd[tid()],"struct v9_mqd")
+  printf("q->cu_mask:%x\n", @entry($q->cu_mask))
+  printf("q->cu_mask_count:%d\n", @entry($q->cu_mask_count))
+  printf("compute_static_thread_mgmt_se0:0x%x\n", m->compute_static_thread_mgmt_se0)
+  printf("compute_static_thread_mgmt_se1:0x%x\n", m->compute_static_thread_mgmt_se1)
+  printf("compute_static_thread_mgmt_se2:0x%x\n", m->compute_static_thread_mgmt_se2)
+  printf("compute_static_thread_mgmt_se3:0x%x\n", m->compute_static_thread_mgmt_se3)
+  m->compute_static_thread_mgmt_se0 = ~0xfffffffe    /* ~se0_dis_cu_mask */
+  m->compute_static_thread_mgmt_se1 = ~0xfffffffe    /* ~se1_dis_cu_mask */
+  m->compute_static_thread_mgmt_se2 = ~0xfffffffe    /* ~se2_dis_cu_mask */
+  m->compute_static_thread_mgmt_se3 = ~0xfffffffe    /* ~se3_dis_cu_mask */
+  printf("compute_static_thread_mgmt_se0:0x%x\n", m->compute_static_thread_mgmt_se0)
+  printf("compute_static_thread_mgmt_se1:0x%x\n", m->compute_static_thread_mgmt_se1)
+  printf("compute_static_thread_mgmt_se2:0x%x\n", m->compute_static_thread_mgmt_se2)
+  printf("compute_static_thread_mgmt_se3:0x%x\n", m->compute_static_thread_mgmt_se3)
+  printf("\n\n")
+
+}
+
+
+/*
+//1. function.return , @entry return NULL pointer
+//2. out of range when access two-dim arrays
+function print_array(arr:long, i:long, j:long) 
+%{
+    uint32_t mask = 0;
+    mask = ((uint32_t **)STAP_ARG_arr)[STAP_ARG_i][STAP_ARG_j];
+    _stp_printf("active mask[%d][%d]: 0x%08x\n", STAP_ARG_i, STAP_ARG_j, mask);
+%}
+
+
+probe module(@amdgpu).function("amdgpu_gfx_parse_disable_cu").return
+{
+    #mask se1,se2,se3
+    setmask(@entry($mask))
+}
+
+probe module(@amdgpu).function("amdgpu_device_init").return
+{
+    if($return != 0)
+       next;    
+    printf("amdgpu device init finish, print cu mask\n")
+    for (i = 0; i < @entry($adev->gfx->config->max_shader_engines); i++) {
+		for (j = 0; j < @entry($adev->gfx->config->max_sh_per_se); j++) {
+           print_array(@entry($adev->gfx->cu_info->bitmap), i, j)
+        }
+    }
+}
+
+*/
+
+
+//workaround :
+//1. global var instead of @entry .
+//2. one-dim arrays instead of two-dim arrays 
+
+global mask
+
+probe module(@amdgpu).function("amdgpu_gfx_parse_disable_cu")
+{
+    mask[tid()] = $mask
+}
+
+probe module(@amdgpu).function("amdgpu_gfx_parse_disable_cu").return
+{
+    if (mask[tid()] == 0) {
+        printf("trouble with mask == 0 \n");
+        next
+    }
+    
+    setmask(mask[tid()])
+}
+
+
+probe module(@amdgpu).function("amdgpu_device_ip_late_init")
+{
+    printf("amdgpu_device_ip_late_init, print cu mask.\n")
+    printf("cu number:%d\n", $adev->gfx->cu_info->number)
+    printf("ao_cu_mask: 0x%lx\n", $adev->gfx->cu_info->ao_cu_mask)
+    //printf("bitmap:%s \n",$adev->gfx->cu_info->bitmap$$)
+    //printf("ao_cu_bitmap:%s \n",$adev->gfx->cu_info->ao_cu_bitmap$$)
+    max_shader = $adev->gfx->config->max_shader_engines
+    for (i = 0; i < max_shader; i++) {
+		for (j = 0; j < $adev->gfx->config->max_sh_per_se; j++) {
+           printf("bitmap[%d][%d]:0x%lx\n", i, j, 
+                  $adev->gfx->cu_info->bitmap[i*max_shader + j])
+        }
+    }
+    
+}
+
+

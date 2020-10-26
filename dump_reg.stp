@@ -1,0 +1,96 @@
+#DWORD REG
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+global mmio_reg
+global pcie_reg
+global gc_cac_rreg
+global se_cac_rreg
+
+function print_fmt(reg, val, op, op_func)
+{
+    printf("[0x%08x, 0x%08x, \"%s\", \"%s\"],\n", reg, val, op, op_func)
+}
+
+//-------------- mmio reg ------------------------
+probe module(@amdgpu).function("amdgpu_mm_rreg")
+{
+    mmio_reg[tid()] = $reg
+}
+
+probe module(@amdgpu).function("amdgpu_mm_rreg").return 
+{
+    #printf("mmio rreg:0x%x, retval: 0x%x\n", mmio_reg[tid()], $return)
+    print_fmt(mmio_reg[tid()], $return, "r", "amdgpu_mm_rreg")
+    delete mmio_reg[tid()]
+}
+
+probe module(@amdgpu).function("amdgpu_mm_wreg") 
+{
+    #printf("mmio wreg:0x%x, value: 0x%x\n", $reg, $v)
+    print_fmt($reg, $v, "w", "amdgpu_mm_wreg")
+}
+
+//------------ pcie reg ----------------------------
+probe module(@amdgpu).function("soc15_pcie_rreg")
+{
+    pcie_reg[tid()] = $reg/4
+}
+
+probe module(@amdgpu).function("soc15_pcie_rreg").return
+{
+    #printf("pcie rreg:0x%x, retval: 0x%x\n", pcie_reg[tid()], $return)
+    print_fmt(pcie_reg[tid()], $return, "r", "soc15_pcie_rreg")
+    delete pcie_reg[tid()]
+}
+
+probe module(@amdgpu).function("soc15_pcie_wreg")
+{
+    #printf("pcie wreg:0x%x, value: 0x%x\n", $reg, $v)
+     print_fmt($reg/4, $v, "w", "soc15_pcie_wreg")
+}
+
+//------------ gc cac reg ----------------------------
+probe module(@amdgpu).function("soc15_gc_cac_rreg")
+{
+    gc_cac_rreg[tid()] = $reg/4
+}
+
+probe module(@amdgpu).function("soc15_gc_cac_rreg").return
+{
+    #printf("gc rreg:0x%x, retval: 0x%x\n", gc_cac_rreg[tid()], $return)
+    print_fmt(gc_cac_rreg[tid()], $return, "r", "soc15_gc_cac_rreg")
+    delete gc_cac_rreg[tid()]
+}
+
+probe module(@amdgpu).function("soc15_gc_cac_wreg")
+{
+    #printf("gc wreg:0x%x, value: 0x%x\n", $reg, $v)
+     print_fmt($reg/4, $v, "w", "soc15_gc_cac_wreg")
+}
+
+//------------ se cac reg ----------------------------
+probe module(@amdgpu).function("soc15_se_cac_rreg")
+{
+    se_cac_rreg[tid()] = $reg/4
+}
+
+probe module(@amdgpu).function("soc15_se_cac_rreg").return
+{
+    #printf("se rreg:0x%x, retval: 0x%x\n", se_cac_rreg[tid()], $return)
+     print_fmt(se_cac_rreg[tid()], $return, "r", "soc15_se_cac_rreg")
+    delete se_cac_rreg[tid()]
+}
+
+probe module(@amdgpu).function("soc15_se_cac_wreg")
+{
+    #printf("se wreg:0x%x, value: 0x%x\n", $reg, $v)
+     print_fmt($reg/4, $v, "w", "soc15_se_cac_wreg")
+}
+
+probe begin{
+   printf("amdgpu_reg_list = [\n")
+}
+
+probe end{
+   printf("]\n")
+}

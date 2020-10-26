@@ -1,0 +1,17 @@
+funcs["kfd_ioctl_get_clock_counters"]=0x8667fa
+funcs["kfd_ioctl_alloc_memory_of_gpu"]=0x38751
+funcs["kfd_ioctl_map_memory_to_gpu"]=0x38751
+funcs["kfd_ioctl_unmap_memory_from_gpu"]=0x350e7
+funcs["kfd_ioctl_free_memory_of_gpu"]=0x350e7
+funcs["kfd_ioctl_wait_events"]=0x2f50a
+funcs["kfd_ioctl_create_event"]=0x200a
+funcs["kfd_ioctl_create_queue"]=0x2e
+funcs["kfd_ioctl_set_event"]=0x2a
+funcs["kfd_ioctl_acquire_vm"]=0x14
+funcs["kfd_ioctl_set_memory_policy"]=0x14
+funcs["kfd_ioctl_set_scratch_backing_va"]=0x14
+funcs["kfd_ioctl_set_trap_handler"]=0x14
+funcs["kfd_ioctl_get_tile_config"]=0x8
+funcs["kfd_ioctl_get_process_apertures_new"]=0x5
+funcs["kfd_ioctl_get_version"]=0x5
+funcs["kfd_ioctl_update_queue"]=0x1

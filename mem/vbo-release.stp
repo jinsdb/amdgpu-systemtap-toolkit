@@ -1,0 +1,62 @@
+@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko"%)
+@define amdttm %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdttm.ko"%)
+global begin,cmt2f,cmt2free,begin2,b2cmt
+global bo_rel
+global fence2bo
+
+probe module(@amdgpu).function("amdgpu_bo_release_notify")
+{
+    abo = &@container_of($bo, "struct amdgpu_bo", tbo)
+	if ($bo->mem->mem_type != 2 || !$bo->mem->mm_node ||
+	    !(abo->flags & (1<<9)))
+		next;
+        
+    bo_rel[tid()] = $bo
+    begin2[$bo] = gettimeofday_ms()
+}
+
+probe module(@amdgpu).function("amdgpu_bo_fence")
+{
+    bo = bo_rel[tid()]
+    if (bo) {
+        fence2bo[$fence] = bo
+    }
+}
+
+probe module(@amdgpu).function("sdma_v4_0_ring_emit_ib")
+{
+    fence = &$job->base->s_fence->finished
+    bo = fence2bo[fence]
+    if (bo) {
+        begin[bo] = gettimeofday_ms()
+        if (begin2[bo]) {
+             b2cmt <<<  gettimeofday_ms() - begin2[bo]
+             delete begin2[bo]
+        }
+    }
+}
+
+probe kernel.function("dma_fence_signal")
+{
+    bo = fence2bo[$fence]
+    if (bo && begin[bo]) {
+        cmt2f <<< gettimeofday_ms() - begin[bo]
+    }
+    delete fence2bo[$fence]
+}
+
+probe module(@amdttm).function("ttm_bo_cleanup_memtype_use") {
+    //printf("%d: %s (%d) amdttm_bo_mem_put\n",  gettimeofday_ms(), execname(),pid())
+    if (begin[$bo]) {
+        cmt2free <<< gettimeofday_ms() - begin[$bo]
+    }
+    delete begin[$bo]
+    delete bo_rel[$bo]
+}
+
+probe timer.s(5)
+{
+    printf("borel to commit: min:%d, max:%d, avg:%d, count: %d\n",@min(b2cmt),@max(b2cmt),@avg(b2cmt),@count(b2cmt))
+    printf("commit to fence: min:%d, max:%d, avg:%d, count: %d\n",@min(cmt2f),@max(cmt2f),@avg(cmt2f),@count(cmt2f))
+    printf("commit to free:  min:%d, max:%d, avg:%d, count: %d\n",@min(cmt2free),@max(cmt2free),@avg(cmt2free), @count(cmt2free))
+}

@@ -1,0 +1,47 @@
+#stap -vv unmap.stp -g -DSTP_NO_OVERLOAD -d kernel \
+#-d /usr/lib/modules/3.10.0-#957.el7.x86_64/updates/dkms/amdgpu.ko \
+#-d /usr/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdttm.ko
+
+function read_phy_mem:long(addr:long)
+%{
+    uint64_t data = 0;
+    void *p;
+    //int cnt = _stp_copy_from_user((void *)&data, (void *)STAP_ARG_addr, sizeof(uint64_t));
+    //_stp_printf("%s copy bytes:%d [0x%llx] from: 0x%llx\n", current->comm, cnt, data, STAP_ARG_addr);
+    // STAP_RETVALUE = data;
+    if (!in_interrupt()){
+        p=ioremap_nocache(0x3f800200000, 8);
+        data = ((uint64_t*)p)[0];
+        _stp_printf("%s phy:0x3f800200000 [0x%llx]\n", current->comm, data);
+
+        if (data == 0xbebebebebebebebe) {
+            dump_stack();
+        }
+        iounmap(p);
+    }
+    
+    STAP_RETVALUE = data;
+
+%}
+
+probe kernel.statement("do_munmap@*:*")
+{
+    if (execname() == "mem_test"){
+       printf("%s\n", pp())
+       data = read_user($start)
+       //printf("0x%llx\n", data)
+    }
+}
+
+probe module("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko").function("*").return
+{
+    printf("%s func:%s\n", execname(), probefunc())
+    data=read_phy_mem(0x3f800200000)
+    if (data == 0xbebebebebebebebe){
+        printf("%s func:%s return, get magic number\n", execname(), probefunc())
+        print_backtrace()
+        println("\n")
+    }
+
+}
+

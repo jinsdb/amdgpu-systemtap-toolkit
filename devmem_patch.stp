@@ -24,6 +24,7 @@ probe kprobe.function("phys_mem_access_prot_allowed").return
     }
     %{c->kregs->ax = 1%}
 }
+
 probe kprobe.function("devmem_is_allowed").return
 {
     printf("%s %s \n", execname(),ppfunc())

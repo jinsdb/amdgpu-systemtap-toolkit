@@ -1,4 +1,6 @@
-# stap -vg iserr.stp -DSTP_NO_OVERLOAD
+/*
+stap -vv iserr.stp -g --ldd -DSTP_NO_OVERLOAD -DMAXSKIPPED=10000 -d kernel -d /home/bin/dqst 
+*/
 # for more info about function, eg:
 # stap -vve 'probe module(@amdgpu).statement("amdgpu_bo_do_create@*:*"){printf("%s %s \n",pp(),$$vars)}'
 
@@ -8,6 +10,29 @@ global entstr
 global dump_stack_flag
 global errcnt = 0
 global stop_on_err_cnt = -1
+
+//for miss debug info kernel.
+/*
+%{
+#include <linux/kallsyms.h>
+%}
+function sprint_symbol:string(uval:long)
+%{
+     char str[KSYM_SYMBOL_LEN];
+     unsigned long addr = (unsigned long)STAP_ARG_uval;
+     memset(str, 0, KSYM_SYMBOL_LEN);
+     sprint_symbol(str, addr);
+     strlcpy(STAP_RETVALUE, str, MAXSTRINGLEN);
+%}
+
+function print_ksyms (callers:string) {
+         __sym = tokenize (callers, " ");
+         while (__sym != "") {
+               printf (" %s : %s\n", __sym, sprint_symbol(strtol(__sym,16)));
+               __sym = tokenize ("", " ");
+         }
+}
+*/
 
 probe funcs = module(@amdgpu).function("*")
 {}
@@ -43,12 +68,15 @@ probe funcs.return
         retval = $return
         if (is_error(retval)) {
             if (dump_stack_flag[tid()] == 0) {
-                dump_stack_flag[tid()] = 1
-                printf("\n\n%s, pid: %d \n", execname(), tid())
-                print_ksyms(backtrace())
+                 printf("\n\n%s, pid: %d \n", execname(), tid())
+                 print_ubacktrace()
             }
             entry_str = entstr[tid(),ppfunc()]
             printf("%s(%s), return: %d (%s)\n", ppfunc(), entry_str, retval, errno_str(retval))
+            if (dump_stack_flag[tid()] == 0) {
+                print_ksyms(backtrace())
+                dump_stack_flag[tid()] = 1
+            }
             errcnt++
             if((stop_on_err_cnt != -1) && (errcnt == stop_on_err_cnt)){
                 %{send_sig(SIGTSTP, current, 0)%}     

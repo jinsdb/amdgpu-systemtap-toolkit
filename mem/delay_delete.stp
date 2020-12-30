@@ -1,0 +1,45 @@
+#stap -vv delay_delete.stp -DMAXSTRINGLEN=4096 -DSTP_NO_OVERLOAD
+global bo_cnt
+global bflags
+global pflg = 0
+global pboflg = 0
+@define amdttm %("/lib/modules/4.15.0-20-generic/updates/dkms/amdttm.ko"%)
+
+probe module(@amdttm).function("ttm_bo_delayed_delete")
+{
+        bo_cnt[tid()] = 0;
+        bflags[tid()] = 1
+}
+
+probe module(@amdttm).function("ttm_bo_cleanup_refs").return{
+        if (bflags[tid()] && $return != 0) {
+            bo_cnt[tid()]++
+            if (pboflg) {
+                //printf("%s\n", $bo->ttm_resv$$)
+                printf("--mem: %s\n", $bo->mem$$)
+                fobj = $bo->ttm_resv->fence
+                if (fobj) {
+                    shared_count = fobj->shared_count;
+                    for (i = 0; i < shared_count; ++i) {
+                        fence = @cast(fobj->shared, "u64")[i]
+                        printf("--fence: %s\n", @cast(fence, "struct dma_fence")$$)
+                    }
+                }
+                pboflg = 0
+            }
+        }
+}
+probe module(@amdttm).function("ttm_bo_delayed_delete").return
+{
+        if (pflg) {
+            printf("%s(%d) check delay delete bo cnt: %d\n\n", execname(), tid(), bo_cnt[tid()])
+            pflg = 0
+        }
+        delete bo_cnt[tid()]
+        bflags[tid()] = 0
+}
+
+probe timer.s(5) {
+    pflg = 1
+    pboflg = 1
+}

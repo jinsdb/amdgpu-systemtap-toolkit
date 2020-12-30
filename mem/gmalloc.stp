@@ -1,0 +1,74 @@
+#
+/*
+stap -vv gmalloc.stp --ldd  -DMAXSTRINGLEN=1024 -DSTP_NO_OVERLOAD -w \
+ -d /root/huangqu/hygondcuperfstresstestsuite/build/install/HygonDCUPerfStressTestSuite/bin/dqst
+*/
+ 
+global bt
+global bo2bt
+
+global vram_total = 0
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+
+probe module(@amdgpu).function("kfd_process_device_create_obj_handle")
+{
+    /* only vram. */
+    if ($mem_type& 1) {
+       mem = $mem
+       sz = $length
+       //printf("alloc memory , mem: %lx, size: %d\n", mem, sz)
+       t = sprint_ubacktrace()
+       bo2bt[mem] = t
+       bt[t] <<< sz
+    }
+    
+}
+
+probe module(@amdgpu).function("amdgpu_amdkfd_gpuvm_free_memory_of_gpu")
+{
+     size = $mem->bo->tbo->mem->size
+     trace = bo2bt[$mem]
+     //printf("free memory, mem: %lx, size: %d\n", $mem, size)
+     bt[trace] <<< -size
+     if (@sum(bt[trace]) <= 0) {
+        delete bt[trace] 
+     }
+     delete bo2bt[$mem]
+}
+
+
+probe module(@amdgpu).function("amdgpu_vram_mgr_new").return
+{
+    mm_node = @cast(@entry($mem), "struct ttm_mem_reg")->mm_node
+    pages   = @cast(@entry($mem), "struct ttm_mem_reg")->num_pages
+    if (($return == 0) && 
+        (mm_node != NULL)) {
+        vram_total += pages
+    }
+}
+
+probe module(@amdgpu).function("amdgpu_vram_mgr_del")
+{
+    if ($mem->mm_node) {
+        vram_total -= $mem->num_pages
+    }
+}
+
+probe timer.s(5) {
+    ansi_clear_screen()
+    vm_totals = 0
+    printf("=================================\n")
+    foreach(b in bt) {
+        vm_totals += @sum(bt[b])
+        printf("alloc memory, totals:%d, min:%d, max:%d\n", 
+            @sum(bt[b]), @min(bt[b]), @max(bt[b]))
+        printf("%s\n", b)
+        println()
+    }
+    printf("vm totals: %d, vram totals: %d \n", vm_totals, vram_total<<12)
+    println("\n\n")
+}
+
+

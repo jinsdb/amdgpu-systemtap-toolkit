@@ -1,0 +1,32 @@
+#export HSA_DISABLE_FRAGMENT_ALLOCATOR=1
+/*
+stap -vv mfree_delay.stp -DMAXMAPENTRIES=6553500 -DSTP_NO_OVERLOAD -DMAXACTION=102400
+*/
+global tm_enter
+global tm
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+@define amdttm %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdttm.ko"%)
+
+probe module(@amdgpu).function("amdgpu_amdkfd_gpuvm_free_memory_of_gpu")
+{
+    tm_enter[&$mem->bo->tbo] = gettimeofday_ms()
+}
+
+probe module(@amdttm).function("ttm_bo_cleanup_memtype_use")
+{
+    if (tm_enter[$bo]) {
+        tm <<< gettimeofday_ms() - tm_enter[$bo]
+        delete tm_enter[$bo]
+    }
+}
+
+probe timer.s(1) {
+    foreach(bo in tm_enter) {
+        count++
+    }
+    try {
+        printf("min %d max %d average: %d, not freed: %d\n", @min(tm), @max(tm), @avg(tm), count)
+    } catch {
+        printf("no free bo!\n");
+    }
+}

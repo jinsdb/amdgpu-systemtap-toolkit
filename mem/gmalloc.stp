@@ -1,6 +1,6 @@
 #
 /*
-stap -vv gmalloc.stp --ldd  -DMAXSTRINGLEN=1024 -DSTP_NO_OVERLOAD -w \
+stap -vv gmalloc.stp --ldd -DMAXSKIPPED=102400 -DMAXSTRINGLEN=1024 -DSTP_NO_OVERLOAD -w \
  -d /root/huangqu/hygondcuperfstresstestsuite/build/install/HygonDCUPerfStressTestSuite/bin/dqst
 */
  
@@ -29,6 +29,7 @@ probe module(@amdgpu).function("kfd_process_device_create_obj_handle")
 probe module(@amdgpu).function("amdgpu_amdkfd_gpuvm_free_memory_of_gpu")
 {
      size = $mem->bo->tbo->mem->size
+     size = size*(1 + $mem->aql_queue)
      trace = bo2bt[$mem]
      //printf("free memory, mem: %lx, size: %d\n", $mem, size)
      bt[trace] <<< -size

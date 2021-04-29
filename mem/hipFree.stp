@@ -1,0 +1,122 @@
+global hipfree
+global am_free
+global hsa_amd_memory_pool_free
+global amd_hsa_amd_memory_pool_free
+global core_Runtime_FreeMemory
+global amd_MemoryRegion_Free
+global amd_MemoryRegion_FreeKfdMemory
+global fmm_release
+
+probe process("/opt/rocm/hip/lib/libhip_hcc.so.3.3.21112.4649-6c76b867").function("hipFree").call
+{
+    addr = ulong_arg(1)
+    hipfree[addr]++
+}
+
+probe process("/opt/rocm/hcc/lib/libhc_am.so.3.1.0").function("am_free")
+{
+    addr = ulong_arg(1)
+    am_free[addr]++
+}
+
+probe process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("hsa_amd_memory_pool_free").exported
+{
+    addr = ulong_arg(1)
+    hsa_amd_memory_pool_free[addr]++
+}
+probe process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("AMD::hsa_amd_memory_pool_free")
+{
+    addr = ulong_arg(1)
+    amd_hsa_amd_memory_pool_free[addr]++
+}
+probe process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("core::Runtime::FreeMemory")
+{
+    addr = ulong_arg(1)
+    core_Runtime_FreeMemory[addr]++
+}
+probe process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("amd::MemoryRegion::Free")
+{
+    addr = ulong_arg(1)
+    amd_MemoryRegion_Free[addr]++
+}
+probe process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("amd::MemoryRegion::FreeKfdMemory")
+{
+    addr = ulong_arg(1)
+    amd_MemoryRegion_FreeKfdMemory[addr]++
+}
+probe process("/opt/rocm/lib64/libhsakmt.so.1.0.6").function("fmm_release")
+{
+    addr = ulong_arg(1)
+    fmm_release[addr]++
+    
+    delete hipfree[addr]
+    delete am_free[addr]
+    delete hsa_amd_memory_pool_free[addr]
+    delete amd_hsa_amd_memory_pool_free[addr]
+    delete core_Runtime_FreeMemory[addr]
+    delete amd_MemoryRegion_Free[addr]
+    delete amd_MemoryRegion_FreeKfdMemory[addr]
+    delete fmm_release[addr]
+    
+}
+
+probe timer.s(5)
+{
+/*
+    printf("hipfree:\n")
+    foreach(addr in hipfree){
+        printf("0x%x, %d\n", addr,hipfree[addr])
+    }
+    
+    printf("am_free:\n")
+    foreach(addr in am_free){
+        printf("0x%x, %d\n", addr,am_free[addr])
+    }
+    
+    printf("hsa_amd_memory_pool_free:\n")
+    foreach(addr in hsa_amd_memory_pool_free){
+        printf("0x%x, %d\n", addr,hsa_amd_memory_pool_free[addr])
+    } 
+    
+    printf("amd_hsa_amd_memory_pool_free:\n")
+    foreach(addr in amd_hsa_amd_memory_pool_free){
+        printf("0x%x, %d\n", addr,amd_hsa_amd_memory_pool_free[addr])
+    }
+
+    printf("core_Runtime_FreeMemory:\n")
+    foreach(addr in core_Runtime_FreeMemory){
+        printf("0x%x, %d\n", addr,core_Runtime_FreeMemory[addr])
+    }
+
+    printf("amd_MemoryRegion_Free:\n")
+    foreach(addr in amd_MemoryRegion_Free){
+        printf("0x%x, %d\n", addr, amd_MemoryRegion_Free[addr])
+    } 
+
+    printf("amd_MemoryRegion_FreeKfdMemory:\n")
+    foreach(addr in amd_MemoryRegion_FreeKfdMemory){
+        printf("0x%x, %d\n", addr,amd_MemoryRegion_FreeKfdMemory[addr])
+    }  
+
+    printf("fmm_release:\n")
+    foreach(addr in fmm_release){
+        printf("0x%x, %d\n", addr,fmm_release[addr])
+    } 
+ */
+    ansi_clear_screen()
+    printf("-----------------------------------------------------------\n")
+    foreach(addr in hipfree){
+        printf("hipfree                        0x%lx, %d\n", addr,hipfree[addr])
+        printf("am_free                        0x%lx, %d\n", addr,am_free[addr])
+        printf("hsa_amd_memory_pool_free       0x%lx, %d\n", addr,hsa_amd_memory_pool_free[addr])
+        printf("amd_hsa_amd_memory_pool_free   0x%lx, %d\n", addr,amd_hsa_amd_memory_pool_free[addr])
+        printf("core_Runtime_FreeMemory        0x%lx, %d\n", addr,core_Runtime_FreeMemory[addr])
+        printf("amd_MemoryRegion_Free          0x%lx, %d\n", addr, amd_MemoryRegion_Free[addr])
+        printf("amd_MemoryRegion_FreeKfdMemory 0x%lx, %d\n", addr, amd_MemoryRegion_FreeKfdMemory[addr])
+        printf("fmm_release                    0x%lx, %d\n", addr,fmm_release[addr])
+    	printf("---------------\n")
+    }
+    
+}
+
+

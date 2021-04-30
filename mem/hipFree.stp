@@ -1,3 +1,17 @@
+/*
+kmtIoctl
+__fmm_release
+fmm_release
+amd::MemoryRegion::FreeKfdMemory(void*, unsigned long)
+amd::MemoryRegion::Free(void*, unsigned long) const
+core::Runtime::FreeMemory(void*)
+HSA::hsa_memory_free(void*)
+AMD::hsa_amd_memory_pool_free(void*)
+hsa_amd_memory_pool_free
+hc::am_free(void*)
+hipFree
+*/
+
 global hipfree
 global am_free
 global hsa_amd_memory_pool_free

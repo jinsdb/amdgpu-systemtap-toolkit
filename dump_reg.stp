@@ -1,5 +1,5 @@
 #DWORD REG
-@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko"%)
 
 global mmio_reg
 global pcie_reg
@@ -8,7 +8,7 @@ global se_cac_rreg
 
 function print_fmt(reg, val, op, op_func)
 {
-    printf("[0x%08x, 0x%08x, \"%s\", \"%s\"],\n", reg, val, op, op_func)
+    printf("{0x%08x, 0x%08x, \"%s\", \"%s\"},\n", reg, val, op, op_func)
 }
 
 //-------------- mmio reg ------------------------
@@ -87,10 +87,41 @@ probe module(@amdgpu).function("soc15_se_cac_wreg")
      print_fmt($reg/4, $v, "w", "soc15_se_cac_wreg")
 }
 
+
 probe begin{
-   printf("amdgpu_reg_list = [\n")
+    prefix = "#include <stdio.h>\n"
+    prefix .= "#include <stdlib.h>\n"
+    prefix .= "#include <string.h>\n"
+    prefix .= "typedef unsigned int uint32_t;\n"
+    prefix .= "#include \"chip_lookup.h\"\n"
+    prefix .= "typedef struct regdesc{\n"
+    prefix .= "uint32_t reg;\n"
+    prefix .= "uint32_t value;\n"
+    prefix .= "char op[2];\n"
+    prefix .= "char name[32];\n"
+    prefix .= "}regdesc_t;"   
+    printf("%s\nregdesc_t amdgpu_reg_list[] = {\n", prefix)
 }
 
 probe end{
-   printf("]\n")
+    postfix = "int main(){\n"
+    postfix .= "int i,j;\n"
+    postfix .= "int regnum = sizeof(amdgpu_reg_list)/sizeof(regdesc_t);\n"
+    postfix .= "int namenum = sizeof(sRegNames)/sizeof(LOOKUP_REG_NAMES);\n"
+    postfix .= "char *name = \"Unkown\";\n" 
+    postfix .= "for (i = 0; i < regnum; i++) {\n"
+    postfix .= "name = \"Unkown\";\n"
+    postfix .= "for(j = 0; j < namenum; j++) {\n"
+    postfix .= "if (sRegNames[j].ulRegIndex == amdgpu_reg_list[i].reg){\n"
+    postfix .= "     name = sRegNames[j].cRegName;\n"
+    postfix .= "   }\n"
+    postfix .= "}\n"
+    postfix .= "printf(\"%s, %s, 0x%x, 0x%x\\n\", name, \n"
+    postfix .= " amdgpu_reg_list[i].op, amdgpu_reg_list[i].reg, amdgpu_reg_list[i].value);\n"
+    postfix .= "}\n" 
+    postfix .= "return 0;\n"
+    postfix .= "}\n"
+    printf("};\n")
+    printf("%s\n", postfix)
+  
 }

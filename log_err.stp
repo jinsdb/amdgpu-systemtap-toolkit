@@ -1,0 +1,10 @@
+probe kernel.function("log_store")
+{
+    key = "drop_caches: 3"
+    text_string = kernel_string($text)
+    
+    if (isinstr(text_string, key)){
+        printf("%s %s\n", execname(), text_string)
+        print_ksyms(backtrace()) # print_backtrace() 
+    }
+}

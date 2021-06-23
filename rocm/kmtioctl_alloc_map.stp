@@ -1,0 +1,58 @@
+global alloc_tm
+global memsz
+global map_tm
+
+/*
+* ALLOC_MEMORY_OF_GPU
+*/
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("kmtIoctl").return {
+    cmd = @entry(ulong_arg(2)) 
+    //printf("cmd = %x ,return: %d\n", cmd, returnval())
+    if(cmd == 0xc0284b16) { //memory alloc
+        size = @cast(ulong_arg(3),"struct kfd_ioctl_alloc_memory_of_gpu_args","kernel</usr/src/amdgpu-3.3-19/include/uapi/linux/kfd_ioctl.h>")->size
+
+        alloc_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+    }
+}
+
+
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("fmm_map_to_gpu"),
+    process("/opt/rocm/lib/libhsakmt.so.1").function("fmm_map_to_gpu_nodes")
+{
+    memsz[tid()] = ulong_arg(2)
+}
+
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("fmm_map_to_gpu").return,
+    process("/opt/rocm/lib/libhsakmt.so.1").function("fmm_map_to_gpu_nodes").return
+{
+    memsz[tid()] = 0
+}
+
+/*
+* MAP_MEMORY_TO_GPU
+*/
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("kmtIoctl").return {
+    cmd = @entry(ulong_arg(2)) 
+    if(cmd == 0xc0184b18) { //memory map
+        size = memsz[tid()]
+        if (size) {
+            map_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+        }
+    }
+}
+
+probe end {
+    printf("\n\n")
+    print("kmtIoctl alloc memory:\n")
+    foreach(size in alloc_tm) {
+        printf("size: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        size, @count(alloc_tm[size]), @min(alloc_tm[size]), @max(alloc_tm[size]), @avg(alloc_tm[size]))
+    }
+    printf("\n")
+    print("kmtIoctl map memory:\n")
+    foreach(size in map_tm) {
+        printf("size: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        size, @count(map_tm[size]), @min(map_tm[size]), @max(map_tm[size]), @avg(map_tm[size]))
+    }
+    printf("\n\n")
+}

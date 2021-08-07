@@ -1,0 +1,133 @@
+#!/usr/bin/env stap
+#stap callgraph.stp -g -DSTP_NO_OVERLOAD -D MAXSKIPPED=100000 -D MAXMAPENTRIES=10000 -w
+
+@define amdgpu %("hydcu"%)
+@define amdttm %("hyttm"%)
+
+global trace_tid = -1
+global call_graph
+
+probe begin{
+	printf("digraph G{\n")
+	printf("\trankdir=TB;\n")
+	printf("\tsize=\"1920,1080\"\n");
+	printf("\tnode [fontsize=12,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box height=.3 ordering=out];\n")
+}
+
+function is_right_context:long(context:long)
+%{
+    int flags = 0;
+    switch(STAP_ARG_context) {
+        case 0: flags = 1; break;
+        case 1: if (!in_irq() && !in_serving_softirq()) { flags = 1;}
+            break;
+        case 2: if (in_irq()){ flags = 1;} 
+            break;
+        case 3: if (in_serving_softirq()){ flags = 1; }
+            break;
+        case 4: if (!in_serving_softirq()) { flags = 1; }
+            break;
+        case 5: if (!in_irq()) { flags = 1; }
+            break;
+        case 6: if (in_irq() || in_serving_softirq()) { flags = 1; }
+            break;
+        default:
+            break;
+    }
+    STAP_RETURN(flags);
+%}
+
+/*
+* context
+* 0: any
+* 1: thread  
+* 2: hardirq 
+* 3: softirq
+* 4: thread + hardirq
+* 5: thread + softirq
+* 6: irq + softirq 
+*/
+function trace(context) {
+    if (trace_tid == tid()) {
+        flags = is_right_context(context)
+        if (flags) {
+            call_graph[caller_addr(), addr()]++
+            //call_graph[stack(1), stack(0)]++
+        }
+    }
+}
+
+
+//probe funcs = module(@amdgpu).function("*").call,
+//              module(@amdttm).function("*").call {}
+//probe funcs = module(@amdgpu).function("*").call{}   
+probe funcs = kernel.function("*@net/*").call{}
+probe funcs {
+      trace(1)
+}
+#if 0
+// trace gpu memalloc flags & 1: vram, flags &2: gtt 
+probe module(@amdgpu).function("kfd_ioctl_alloc_memory_of_gpu") {
+	flags = @cast($data, "struct kfd_ioctl_alloc_memory_of_gpu_args")->flags
+	if (trace_tid == -1 && (flags & 1)) {
+	    trace_tid = tid()
+	    trace(1)
+	}
+	
+}
+
+/*
+*  exit function
+*/
+probe module(@amdgpu).function("kfd_ioctl_alloc_memory_of_gpu").return {
+    if (trace_tid == tid()) {
+        trace_tid = -1
+        exit()
+    }
+}
+#endif
+
+/*
+probe module("/home/tooltest/test.ko").function("test_init")
+{
+        if (trace_tid == -1) {
+           trace_tid = tid()
+           trace(1)
+        }
+}
+
+probe module("/home/tooltest/test.ko").function("test_init").return
+{
+    if (trace_tid == tid()) {
+        trace_tid = -1
+        exit()
+    }
+
+}
+*/
+
+probe kernel.function("inet_sendmsg")
+{
+     if (trace_tid == -1 && $sock->type == 1) {
+           trace_tid = tid()
+           trace(1)
+     }
+
+}
+probe kernel.function("inet_sendmsg").return
+{
+    if (trace_tid == tid()) {
+        trace_tid = -1
+        exit()
+    }
+
+}
+
+probe end{
+
+    foreach([caller, func] in call_graph) {
+        printf("\"%s\" -> \"%s\";\n", symname(caller), symname(func))
+    }
+
+    printf("}\n")
+}

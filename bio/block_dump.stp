@@ -1,0 +1,113 @@
+function __bio_devname:string(bio:long)
+{
+    if (@defined(@cast(bio, "bio")->bi_bdev)) {
+        return bdevname(@cast(bio, "bio")->bi_bdev)
+    }
+    else {
+        return sprintf("%s%d", 
+            kernel_string(@cast(bio, "bio")->bi_disk->disk_name),
+                @cast(bio, "bio")->bi_partno)
+    }
+}
+
+function __bio_ino:long(bio:long)
+%{ 
+    struct bio *bio = (struct bio *)(uintptr_t)STAP_ARG_bio;
+    struct page *bv_page = ((bio && kread(&(bio->bi_vcnt)))
+			    ? kread(&(bio->bi_io_vec[0].bv_page)) : NULL);
+
+    STAP_RETVALUE = -1;
+    if (bv_page) {
+        (void)kderef_buffer(NULL, bv_page, sizeof(struct page));
+
+        if (!PageSlab(bv_page) && !PageSwapCache(bv_page)) {
+            struct address_space *mapping = kread(&(bv_page->mapping));
+            if (mapping && ((unsigned long)mapping & PAGE_MAPPING_ANON) == 0) {
+                struct inode *host = kread(&(mapping->host));
+                if (host)
+                    STAP_RETVALUE = kread(&(host->i_ino));
+            }
+        }
+    }
+    CATCH_DEREF_FAULT();
+%}
+
+function bio_inode:long(bio:long)
+%{ 
+    struct bio *bio = (struct bio *)(uintptr_t)STAP_ARG_bio;
+    struct page *bv_page = ((bio && kread(&(bio->bi_vcnt)))
+			    ? kread(&(bio->bi_io_vec[0].bv_page)) : NULL);
+
+    STAP_RETVALUE = -1;
+    if (bv_page) {
+	(void)kderef_buffer(NULL, bv_page, sizeof(struct page));
+
+        if (!PageSlab(bv_page) && !PageSwapCache(bv_page)) {
+            struct address_space *mapping = kread(&(bv_page->mapping));
+            if (mapping && ((unsigned long)mapping & PAGE_MAPPING_ANON) == 0) {
+                struct inode *host = kread(&(mapping->host));
+                if (host)
+                    STAP_RETVALUE = (long)host;
+            }
+        }
+    }
+    CATCH_DEREF_FAULT();
+%}
+
+function disk_get_part_start_sect:long(disk:long, partno:long)
+%{ 
+    struct gendisk *disk = (struct gendisk *)(uintptr_t)STAP_ARG_disk;
+    int partno = (int)STAP_ARG_partno;
+    struct hd_struct *part;
+
+    STAP_RETVALUE = 0;
+    if (disk) {
+        (void)kread(&(disk->part_tbl));
+        part = disk_get_part(disk, partno);
+
+        if (part) {
+            (void)kread(&(part->start_sect));
+            STAP_RETVALUE = part->start_sect;
+            disk_put_part(part);
+        }
+    }
+    CATCH_DEREF_FAULT();
+
+%}
+
+function __bio_start_sect:long(bio:long)
+{
+    try {
+        if (@defined(@cast(bio, "bio")->bi_dev)) {
+            return @cast(bio, "bio")->bi_bdev->bd_part->start_sect
+        } else if (@defined(@cast(bio, "bio")->bi_disk)) {
+            return disk_get_part_start_sect(@cast(bio, "bio")->bi_disk,
+					    @cast(bio, "bio")->bi_partno)
+        }
+    } catch {
+        return -1
+    }
+}
+probe kprobe.function("submit_bio") {
+    bio = &@cast(pointer_arg(1), "struct bio")
+
+    rw = @choose_defined(bio->bi_opf, bio->bi_rw)
+    sector = @choose_defined(bio->bi_iter->bi_sector, bio->bi_sector)
+    size = @choose_defined(bio->bi_iter->bi_size, bio->bi_size)
+    //sector = bio->bi_iter->bi_sector
+    //size = bio->bi_iter->bi_size
+    start_sec = __bio_start_sect(bio)
+    
+    devname = __bio_devname(bio)
+    ino = __bio_ino(bio)
+    try {
+        inode = bio_inode(bio)
+        name = inode_name(inode)
+    } catch{
+        name = "N/A"
+    }
+    
+    printf("%s %s %s [ino: %d], %s sector (%d): %d - %d\n", execname(),
+        devname, name, ino, bio_rw_str(rw), size>>9,
+        start_sec + sector, start_sec + sector + (size>>9))
+}

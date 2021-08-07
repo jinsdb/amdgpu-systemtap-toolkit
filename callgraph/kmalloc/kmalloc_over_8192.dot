@@ -1,0 +1,22 @@
+digraph G{
+	rankdir=TB;
+	size="1920,1080"
+	node [fontsize=10,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box height=.3];
+"kmalloc" -> "kmalloc_order_trace";
+"kmalloc_order_trace" -> "__get_free_pages";
+"__get_free_pages" -> "alloc_pages_current";
+"alloc_pages_current" -> "policy_nodemask";
+"alloc_pages_current" -> "policy_zonelist";
+"alloc_pages_current" -> "__alloc_pages_nodemask";
+"__alloc_pages_nodemask" -> "next_zones_zonelist";
+"__alloc_pages_nodemask" -> "get_page_from_freelist";
+"get_page_from_freelist" -> "next_zones_zonelist";
+"get_page_from_freelist" -> "__zone_watermark_ok";
+"get_page_from_freelist" -> "__rmqueue";
+"get_page_from_freelist" -> "get_pageblock_flags_group";
+"get_page_from_freelist" -> "__mod_zone_page_state";
+"get_page_from_freelist" -> "__mod_zone_page_state";
+"get_page_from_freelist" -> "zone_statistics";
+"zone_statistics" -> "__inc_zone_state";
+"zone_statistics" -> "__inc_zone_state";
+}

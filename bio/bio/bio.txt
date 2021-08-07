@@ -1,0 +1,138 @@
+cat  build.sh
+kprobe -s 'p:myprobe ata_scsi_queuecmd'
+ => ata_scsi_queuecmd
+ => scsi_request_fn
+ => __blk_run_queue
+ => queue_unplugged
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => __do_page_cache_readahead
+ => ondemand_readahead
+ => page_cache_sync_readahead
+ => generic_file_aio_read
+ => xfs_file_buffered_aio_read
+ => xfs_file_aio_read
+ => do_sync_read
+ => vfs_read
+ => SyS_read
+ => system_call_fastpath
+ ---------------------------------------------
+ kprobe -s 'p:myprobe sd_setup_read_write_cmnd'
+ => sd_setup_read_write_cmnd  //SCSI_CMD: init scsi cmd
+ => scsi_setup_cmnd
+ => scsi_prep_fn
+ => blk_peek_request
+ => scsi_request_fn
+ => __blk_run_queue
+ => blk_queue_bio            //request: init_request_from_bio
+ => generic_make_request  
+ => submit_bio               // /proc/sys/vm/block_dump
+ => xfs_submit_ioend.isra.12
+ => xfs_vm_writepages   //xfs_do_writepage->xfs_writepage_map->xfs_add_to_ioend->xfs_alloc_ioend->xfs_init_bio_from_bh
+ => do_writepages
+ => __writeback_single_inode
+ => writeback_sb_inodes
+ => __writeback_inodes_wb
+ => wb_writeback
+ => bdi_writeback_workfn
+ => process_one_work
+ => worker_thread
+ => kthread
+ => ret_from_fork_nospec_begin
+----------------------vi -------------------
+vi-22820 [002] d... 1142499.598783: <stack trace>
+ => sd_setup_read_write_cmnd  //SCSI_CMD: init scsi cmd
+ => scsi_setup_cmnd
+ => scsi_prep_fn
+ => blk_peek_request
+ => scsi_request_fn
+ => __blk_run_queue
+ => cfq_insert_request
+ => __elv_add_request
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => ext4_writepages
+ => do_writepages
+ => __filemap_fdatawrite_range
+ => file_write_and_wait_range
+ => ext4_sync_file
+ => vfs_fsync_range
+ => do_fsync
+ => SyS_fsync
+ => do_syscall_64
+ => entry_SYSCALL_64_after_hwframe
+-------
+ => submit_bio
+ => ext4_readpages
+ => __do_page_cache_readahead
+ => ondemand_readahead
+ => page_cache_async_readahead
+ => generic_file_read_iter
+ => ext4_file_read_iter
+ => new_sync_read
+ => __vfs_read
+ => vfs_read
+ => SyS_read
+ => do_syscall_64
+ => entry_SYSCALL_64_after_hwframe
+
+
+
+echo 1 > /proc/sys/vm/block_dump
+scsi_logging_level -s --mlqueue 3
+
+#echo 0xffff > /proc/sys/dev/scsi/logging_level
+
+ls -i run_kfdtest.sh 
+27657714 run_kfdtest.sh
+[95963.706238] cat(21924): READ block 78657992 on dm-0 (8 sectors) //submit_bio
+[95963.706258] sd 4:0:0:0: [sda] tag#14 Send: scmd 0xffffa0d5d52d7100
+[95963.706263] sd 4:0:0:0: [sda] tag#14 CDB: Read(10) 28 00 72 e0 69 c8 00 00 08 00
+
+
+1. dump文件block
+debugfs -R "stat /etc/passwd"  /dev/sda2
+-------
+Inode: 66061446   Type: regular    Mode:  0644   Flags: 0x80000
+Links: 1   Blockcount: 8
+EXTENTS:
+(0):138598575
+
+2.获取磁盘block大小、扇区大小
+dumpe2fs /dev/sda2 |egrep "Inode size|Block size"
+Block size:           4096
+Inode size:	          256
+
+fdisk -l  512
+
+3. 计算扇区：138598575 * 8 = 1108788600
+echo 1 > /proc/sys/vm/block_dump
+cat /etc/passwd
+
+submit_bio(bio) //进入submit bio中的bio sector，还没有加上分区，是分区内的逻辑块号
+cat(394): READ block 1108788600 on sda2 (8 sectors)
+和计算出来的一致
+
+4. dd直接按扇区读取数据：
+   相对扇区
+   dd if=/dev/sda2 of=/tmp/test.dump skip=1108788600 bs=512 count=8
+   绝对扇区
+   dd if=/dev/sda of=/tmp/test.dump skip=1109839224 bs=512 count=8
+
+5. 校验数据：cat /tmp/test.dump
+
+总结：
+1)通过fd找到文件对应的inode
+2)通过inode找到文件所有的block (比如ext4，基于extend的B+树实现)
+
+
+
+
+EXTEND B+树
+https://zhuanlan.zhihu.com/p/58117426
+
+inode与block：
+https://blog.csdn.net/u014426028/article/details/105809411
+
+BIO（宋宝华）
+https://blog.csdn.net/21cnbao/article/details/103675866

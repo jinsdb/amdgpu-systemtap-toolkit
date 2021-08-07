@@ -1,0 +1,20 @@
+digraph G{
+	rankdir=TB;
+	size="1920,1080"
+	node [fontsize=12,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box height=.3 ordering=out];
+"sock_aio_read.part.9" -> "inet_recvmsg";
+"inet_recvmsg" -> "tcp_recvmsg";
+"tcp_recvmsg" -> "lock_sock_nested";
+"tcp_recvmsg" -> "skb_copy_datagram_iovec";
+"tcp_recvmsg" -> "tcp_rcv_space_adjust";
+"tcp_recvmsg" -> "__kfree_skb";
+"__kfree_skb" -> "skb_release_all";
+"skb_release_all" -> "skb_release_head_state";
+"skb_release_head_state" -> "sock_rfree";
+"skb_release_all" -> "skb_release_data";
+"__kfree_skb" -> "kfree_skbmem";
+"tcp_recvmsg" -> "tcp_cleanup_rbuf";
+"tcp_cleanup_rbuf" -> "__tcp_select_window";
+"tcp_recvmsg" -> "release_sock";
+"release_sock" -> "tcp_release_cb";
+}

@@ -105,7 +105,7 @@ Inode size:	          256
 
 fdisk -l  512
 
-3. 计算扇区：138598575 * 8 = 1108788600
+3. 计算扇区(secs = block*4096/512)：138598575 * 8 = 1108788600
 echo 1 > /proc/sys/vm/block_dump
 cat /etc/passwd
 
@@ -123,6 +123,9 @@ cat(394): READ block 1108788600 on sda2 (8 sectors)
 
 总结：
 1)通过fd找到文件对应的inode
+  file = current->files->fdt[fd].file
+  mapping = file->f_mapping;
+  inode = mapping->host;
 2)通过inode找到文件所有的block (比如ext4，基于extend的B+树实现)
 
 

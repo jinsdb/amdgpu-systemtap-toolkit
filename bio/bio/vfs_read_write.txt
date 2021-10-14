@@ -1,0 +1,67 @@
+write:
+
+do_direct_IO
+dio->inode
+
+vfs_write
+  do_sync_write
+    xfs_file_aio_write
+       generic_segment_checks
+       xfs_file_dio_aio_write
+          __blockdev_direct_IO(WRITE)
+             do_blockdev_direct_IO
+               struct dio_submit sdio = { 0, };
+               dio = alloc()
+               blk_start_plug
+               do_direct_IO(dio, &sdio, &map_bh)
+                  dio_get_page
+                      dio_refill_pages
+                          get_user_pages_fast //获取用户态buffer page(zero copy), 
+                            user page fill in dio->pages[]
+                  get_more_blocks() //分配block
+                     xfs_get_blocks_direct
+                  submit_page_section
+                     dio_new_bio
+                       sdio->bio = bio_alloc(GFP_KERNEL, nr_vecs);
+                     dio_bio_add_page
+                       bio->bi_io_vec[i].page = sdio->cur_page
+                       bio->bi_io_vec[i].bv_len = sdio->cur_len;
+                       bio->bi_io_vec[i].bv_offset = sdio->cur_offset;
+                     if(sdio->boundary)
+                        dio_bio_submit(dio, sdio)
+                          submit_bio
+                             generic_make_request
+                                dm_make_request
+                                blk_queue_enter
+                                blk_queue_bio
+                                   elv_merge
+              blk_finish_plug
+                blk_flush_plug_list
+                   __elv_add_request
+                   queue_unplugged
+                      __blk_run_queue
+                        scsi_request_fn
+                          blk_peek_request
+                          blk_queue_start_tag
+                          scsi_init_cmd_errh
+                          scsi_dispatch_cmd
+                            ata_scsi_queuecmd
+                              ......
+             dio_await_completion
+                 io_schedule
+                 dio_bio_complete
+             dio_complete
+                 xfs_end_io_direct_write
+
+
+submit_bio()此时inode -> block关系已经明确，写IO block已经分配？
+从dio_bio_submit的dio处获取inode->block映射关系
+
+buffer替换，数据拷贝     
+iscsi_sw_tcp_pdu_init() 初始化iscsi cmd sgl，改为HBM buffer
+
+读IO数据拷贝
+iscsi_tcp_recv_skb
+  iscsi_tcp_segment_recv ->copy数据到sgl，改为sdma copy到iscsi cmd sgl
+
+              

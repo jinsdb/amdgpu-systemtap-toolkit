@@ -1,0 +1,64 @@
+#!/usr/bin/env stap
+#stap ucallgraph_mt.stp -g -DSTP_NO_OVERLOAD -D MAXSKIPPED=100000 -D MAXMAPENTRIES=10000 -w
+
+global trace_tid = -1
+global call_graph
+
+function print_header()
+{
+	printf("digraph G{\n")
+	printf("\trankdir=TB;\n")
+	printf("\tsize=\"1920,1080\"\n");
+	printf("\tnode [fontsize=12,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box height=.3 ordering=out];\n")
+}
+
+function trace() 
+{
+    try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
+    call_graph[tid(), parent, usymname(uaddr())]++
+}
+
+probe funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),
+	          process("/opt/rocm/lib/libhsakmt.so.1").function("*"){}
+
+probe funcs 
+{
+     trace()
+}
+
+/*          
+probe func_enter = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("hsa_init") {}
+probe func_exit = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("hsa_init").return{}
+probe func_enter
+{
+     if (trace_tid == -1) {
+         trace_tid = tid()
+         trace()
+     }
+
+}
+probe func_exit
+{
+    if (trace_tid == tid()) {
+        trace_tid = -1
+        exit()
+    }
+
+}
+*/
+
+probe end
+{
+    thrid = 0
+    foreach([t+, caller, func] in call_graph) {
+        if (thrid != t) {
+            if (thrid != 0){
+                printf("}\n")
+            }
+            print_header()
+            thrid = t
+        }
+        printf("\"%s\"->\"%s\";\n", caller, func)
+    }
+    printf("}\n")
+}

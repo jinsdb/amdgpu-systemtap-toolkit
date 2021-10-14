@@ -1,0 +1,24 @@
+global thread_depth
+global entry_funcs
+
+probe funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),
+	      process("/opt/rocm/lib/libhsakmt.so.1").function("*"){}
+       
+probe funcs
+{
+    if (thread_depth[tid()] <= 0) {
+        entry_funcs[usymname(uaddr())]++
+    }
+    thread_depth[tid()]++
+}
+
+probe funcs.return
+{
+    thread_depth[tid()]--
+}
+
+probe end{
+    foreach(func in entry_funcs) {
+        printf("%s     %d\n", func, entry_funcs[func])
+    }
+}

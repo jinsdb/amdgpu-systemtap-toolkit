@@ -15,7 +15,7 @@ function print_header()
 function trace() 
 {
     try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
-    call_graph[tid(), parent, usymname(uaddr())]++
+    call_graph[tid(), parent, probefunc()]++
 }
 
 probe funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),

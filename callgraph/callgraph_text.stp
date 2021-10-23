@@ -23,11 +23,15 @@ probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
         process("/opt/rocm/lib/librocblas.so").function("*"),
         process("/opt/rocm/lib/libamd_comgr.so.1").function("*"),
         process("/opt/rocm/lib/libhsakmt.so.1").function("*"),
+        process("/opt/rocm/hsa/lib/libhsa-ext-image64.so.1").function("*"),
         process("/root/mengzhi/dgemm_scard_nobind/dcudgemm_stress.out").function("*")
 {}
          
 probe funcs
 {
+   /*TODO:
+    * Check for duplicate function calls with the same call depth in different functions
+    */
    depth = my_thread_indent_depth(2)
    call_graph[tid(), depth, probefunc()]++
 }
@@ -47,15 +51,11 @@ function print_tree()
     thrid = 0
     foreach([t+, depth, func] in call_graph) {
         if (thrid != t) {
-            #if (thrid != 0){
-            #    printf("}\n")
-            #}
             print_header(t)
             thrid = t
         }
         printf("%s%s\n", sprintf("%-*s",depth,""), func)
     }
-    #printf("}\n")
 }
 
 function print_func()

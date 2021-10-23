@@ -1,5 +1,5 @@
 #!/usr/bin/env stap
-#stap ucallgraph_mt.stp -g -DSTP_NO_OVERLOAD -D MAXSKIPPED=100000 -D MAXMAPENTRIES=10000 -w
+#stap ucallgraph_mt.stp -DSTP_NO_OVERLOAD -DMAXSKIPPED=100000 -DMAXMAPENTRIES=10000 -DMAXACTION=10000 -w -d ./dcudgemm_stress.out --ldd -c './dcudgemm_stress.out 1 576 576 576' -o dgemm.log
 
 global trace_tid = -1
 global call_graph
@@ -14,13 +14,27 @@ function print_header()
 
 function trace() 
 {
-    try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
-    call_graph[tid(), parent, probefunc()]++
+    if (trace_tid == -1 || trace_tid == tid()) {
+        /* TODO: check hole chain: a -> b ... c -> d, 
+           b -> c is miss due to some std lib */
+        try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
+        call_graph[tid(), parent, probefunc()]++
+    }
 }
-
+/*
 probe funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),
 	          process("/opt/rocm/lib/libhsakmt.so.1").function("*"){}
-
+*/
+probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
+        process("/opt/rocm/lib/libmcwamp.so.3").function("*"),
+        process("/opt/rocm/lib/libhip_hcc.so.3").function("*"),
+        process("/opt/rocm/lib/libhsa-runtime64.so.1").function("*"),
+        process("/opt/rocm/lib/librocblas.so").function("*"),
+        process("/opt/rocm/lib/libamd_comgr.so.1").function("*"),
+        process("/opt/rocm/lib/libhsakmt.so.1").function("*"),
+        process("/opt/rocm/hsa/lib/libhsa-ext-image64.so.1").function("*"),
+        process("/root/mengzhi/dgemm_scard_nobind/dcudgemm_stress.out").function("*")
+{}
 probe funcs 
 {
      trace()

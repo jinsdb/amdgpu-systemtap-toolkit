@@ -13,6 +13,9 @@ probe begin{
 
 function trace() {
     if (trace_tid == tid()) {
+        /* TODO: check hole chain: a -> b ... c -> d, 
+         *  b -> c is miss due to some std lib 
+         */
         try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
         call_graph[parent, usymname(uaddr())]++
     }

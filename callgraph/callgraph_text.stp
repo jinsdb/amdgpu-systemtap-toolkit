@@ -29,7 +29,7 @@ probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
          
 probe funcs
 {
-   /*TODO:
+   /* TODO:
     * Check for duplicate function calls with the same call depth in different functions
     */
    depth = my_thread_indent_depth(2)

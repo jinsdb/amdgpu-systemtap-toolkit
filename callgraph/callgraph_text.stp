@@ -1,5 +1,5 @@
 #stap callgraph_text.stp -DSTP_NO_OVERLOAD -DMAXSKIPPED=100000 -DMAXACTION=100000 -DMAXMAPENTRIES=10000 -w
-global call_graph
+global call_graph[10000]
 
 @__private30 global _indent_counters
 
@@ -31,9 +31,10 @@ probe funcs
 {
    /* TODO:
     * Check for duplicate function calls with the same call depth in different functions
+    * This requires the systemtap associative array to support the insert operation to avoid it.
     */
    depth = my_thread_indent_depth(2)
-   call_graph[tid(), depth, probefunc()]++
+   call_graph[tid(), depth, probefunc()]++ 
 }
 probe funcs.return
 {

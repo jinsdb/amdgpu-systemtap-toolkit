@@ -6,13 +6,7 @@ import re
 sys.setrecursionlimit(10000)
 
 '''
-t1
- t1_1
- t1_2
-  t1_2_1
-t2
- t2_1
- t2_2
+Input:
 
 test2 = [
   ('t1', 't1_1'),
@@ -21,6 +15,16 @@ test2 = [
   ('t2', 't2_1'),
   ('t2', 't2_2'),
 ]
+
+Output:
+
+t1
+ t1_1
+ t1_2
+  t1_2_1
+t2
+ t2_1
+ t2_2
 
 '''
 list_tree = []
@@ -46,7 +50,7 @@ def list_formart_order(parentnode, tree, ltree, space_cnt = 0):
                       if (k[0] == x[1]): # is not end node
                          is_end_node = 0
                          break
-               if (found == 1):
+               if (found == 1):# touch some trouble? a -> d...z, b -> d...z, b will lost d branch
                   if (is_end_node):
                      ltree.append((space_cnt, x[1]))
                else:   

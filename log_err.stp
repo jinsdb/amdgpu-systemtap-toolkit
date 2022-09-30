@@ -1,10 +1,14 @@
+#!/bin/stap
+#stap -vv log_err.stp "callback failed with -11 in non-blockable context."
 probe kernel.function("log_store")
 {
-    key = "drop_caches: 3"
+    #key = "callback failed with -11 in non-blockable context."
+    key = @1
     text_string = kernel_string($text)
     
     if (isinstr(text_string, key)){
         printf("%s %s\n", execname(), text_string)
-        print_ksyms(backtrace()) # print_backtrace() 
+        #print_ksyms(backtrace()) # 
+	print_backtrace() 
     }
 }

@@ -12,11 +12,11 @@ global call_graph[10000]
     return (x>0 ? x : 0)
 
 }
-/*
-probe funcs = process("/usr/sbin/sshd").function("*"),
+
+probe sshd_funcs = process("/usr/sbin/sshd").function("*"),
               process("/usr/lib64/security/*.so").function("*")
-*/
-probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
+
+probe rocm_funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
         process("/opt/rocm/lib/libmcwamp.so.3").function("*"),
         process("/opt/rocm/lib/libhip_hcc.so.3").function("*"),
         process("/opt/rocm/lib/libhsa-runtime64.so.1").function("*"),
@@ -27,7 +27,7 @@ probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
         process("/root/mengzhi/dgemm_scard_nobind/dcudgemm_stress.out").function("*")
 {}
          
-probe funcs
+probe rocm_funcs
 {
    /* TODO:
     * Check for duplicate function calls with the same call depth in different functions
@@ -36,7 +36,7 @@ probe funcs
    depth = my_thread_indent_depth(2)
    call_graph[tid(), depth, probefunc()]++ 
 }
-probe funcs.return
+probe rocm_funcs.return
 {
   my_thread_indent_depth(-2)
 }

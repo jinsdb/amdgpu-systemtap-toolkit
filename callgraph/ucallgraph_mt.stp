@@ -2,8 +2,8 @@
 #stap ucallgraph_mt.stp -DSTP_NO_OVERLOAD -DMAXSKIPPED=100000 -DMAXMAPENTRIES=10000 -DMAXACTION=10000 -w -d ./dcudgemm_stress.out --ldd -c './dcudgemm_stress.out 1 576 576 576' -o dgemm.log
 
 /*
- trace_tid: default -1 is multithread mode,
- In single threaded mode, will be init in func_enter with tid()
+* trace_tid: default -1 is multithread mode,
+* In single threaded mode, will be init in func_enter with tid()
 */
 global trace_tid = -1
 
@@ -41,13 +41,13 @@ function trace()
         parent[tid(), depth + 1] = probefunc() //next low level parent
     }
 }
-probe funcs = process("/usr/sbin/sshd").function("*"),
+probe sshd_funcs = process("/usr/sbin/sshd").function("*"),
               process("/usr/lib64/security/*.so").function("*"){}
-/*
-probe funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),
+
+probe hsa_kmt_funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),
 	          process("/opt/rocm/lib/libhsakmt.so.1").function("*"){}
 
-probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
+probe rocm_funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
         process("/opt/rocm/lib/libmcwamp.so.3").function("*"),
         process("/opt/rocm/lib/libhip_hcc.so.3").function("*"),
         process("/opt/rocm/lib/libhsa-runtime64.so.1").function("*"),
@@ -57,13 +57,13 @@ probe funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
         process("/opt/rocm/hsa/lib/libhsa-ext-image64.so.1").function("*"),
         process("/root/mengzhi/dgemm_scard_nobind/dcudgemm_stress.out").function("*")
 {}
-*/
-probe funcs 
+
+probe rocm_funcs 
 {
      trace()
 }
 
-probe funcs.return
+probe rocm_funcs.return
 {
     depth = _thread_indent(-1)
     #delete parent[tid(), depth]

@@ -39,7 +39,7 @@ kprobe -s 'p:myprobe ata_scsi_queuecmd'
  => worker_thread
  => kthread
  => ret_from_fork_nospec_begin
-----------------------vi -------------------
+----------------------vi （read）-------------------
 vi-22820 [002] d... 1142499.598783: <stack trace>
  => sd_setup_read_write_cmnd  //SCSI_CMD: init scsi cmd
  => scsi_setup_cmnd
@@ -67,7 +67,7 @@ vi-22820 [002] d... 1142499.598783: <stack trace>
  => __do_page_cache_readahead
  => ondemand_readahead
  => page_cache_async_readahead
- => generic_file_read_iter
+ => generic_file_read_iter    //copy_page_to_iter，从page cache拷贝到用户态buffer page
  => ext4_file_read_iter
  => new_sync_read
  => __vfs_read

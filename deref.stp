@@ -1,0 +1,25 @@
+/*
+static int amdgpu_vm_pt_create(struct amdgpu_device *adev,
+			       struct amdgpu_vm *vm,
+			       int level, bool immediate,
+			       struct amdgpu_bo_vm **vmbo)
+*/
+@define hydcu %("/lib/modules/4.15.0-20-generic/updates/dkms/hydcu.ko"%)
+
+function deref:long(ptr:long)
+%{
+    STAP_RETURN(*(void **)STAP_ARG_ptr);
+%}
+
+probe module(@hydcu).function("amdgpu_vm_pt_create").return
+{
+  pt = deref(@entry($vmbo))
+  printf("alloc pt(amdgpu_bo_vm):%p, bo: %p\n", pt, &@cast(pt, "struct amdgpu_bo_vm")->bo)
+}
+
+probe module(@hydcu).function("amdgpu_vm_free_table")
+{
+    if ($entry->bo){
+        printf("free table:pt_bo:%p\n", $entry->bo);
+    }
+}

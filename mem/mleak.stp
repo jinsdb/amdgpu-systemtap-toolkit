@@ -1,7 +1,7 @@
 # 
 /*
 stap mleak.stp -g -DMAXSTRINGLEN=1024 -DMAXMAPENTRIES=10000 -DSTP_NO_OVERLOAD --ldd \
--d /home/yuanxiong/hygondcuperfstresstestsuite/build/install/HygonDCUPerfStressTestSuite/bin/hdpsts
+-d /home/stresstestsuite/build/install/TestSuite/bin/hdpsts
 */
 # ptr --> bt, , bt --> bytes
 # ptr --> bytes

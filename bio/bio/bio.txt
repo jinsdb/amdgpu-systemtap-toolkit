@@ -126,6 +126,24 @@ cat(394): READ block 1108788600 on sda2 (8 sectors)
   file = current->files->fdt[fd].file
   mapping = file->f_mapping;
   inode = mapping->host;
+==>
+  fd = fdget(input_param->ioargs.fd);
+  inode = file_inode(fd.file);
+  struct block_device *bdev = &BDEV_I(inode)->bdev;
+ ---------
+  struct file *testfile;
+  struct block_device *bdev;
+
+  testfile = filp_open("/mnt/testdisk/1.bin", (O_RDWR | O_LARGEFILE), OP_FLAGS);
+  bdev = testfile->f_inode->i_sb->s_bdev;
+ ---------
+ //struct gendisk *disk；
+  //struct device *ddev = disk_to_dev(disk);
+ 
+ struct device *ddev = &bdev->bd_device;
+
+ dev = ddev->parent->parent;  //1 parent:nvme_ctrl.device, 2 parent:pci_device.device
+
 2)通过inode找到文件所有的block (比如ext4，基于extend的B+树实现)
 
 

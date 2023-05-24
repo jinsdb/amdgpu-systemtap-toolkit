@@ -1,10 +1,12 @@
-#tracefs=`sed -ne 's/^tracefs \(.*\) tracefs.*/\1/p' /proc/mounts`
-tracefs=/sys/kernel/debug
-echo nop > $tracefs/tracing/current_tracer
-echo 0 > $tracefs/tracing/tracing_on
+debugfs=/sys/kernel/debug
+echo nop > $debugfs/tracing/current_tracer
+echo 0 > $debugfs/tracing/tracing_on
 echo $$
-echo $$ > $tracefs/tracing/set_ftrace_pid
-echo function > $tracefs/tracing/current_tracer
-echo 1 > $tracefs/tracing/tracing_on
-exec "$@"
+echo $$ > $debugfs/tracing/set_ftrace_pid
+#echo function > $tracefs/tracing/current_tracer
+echo function_graph > $debugfs/tracing/current_tracer
+echo 'vfs_read:traceoff:1' > set_ftrace_filter
+echo vfs_read > $debugfs/tracing/set_graph_function
+echo 1 > $debugfs/tracing/tracing_on
+exec $@
 

@@ -2,9 +2,7 @@
 global funcs
 probe begin{printf("start stats...\n")}
 
-probe module("amdgpu").function("*"),
-      module("amdttm").function("*"),
-	  module("ttm").function("*"){
+probe module("hydcu").function("*"){
    funcs[ppfunc()]++
 }
 

@@ -1,0 +1,33 @@
+#! /usr/bin/env stap
+#stap -vv para-callgraph.stp 'module("hydcu").function("*")' 'module("hydcu").function("svm_ioctl")' --suppress-handler-errors
+function trace(entry_p, extra) {
+  %( $# > 1 %? if (tid() in trace) %)
+   if (entry_p > 0)
+      printf("%-*s%s(%s) %s\n",
+         thread_indent_depth (entry_p),"",
+         ppfunc (),
+         extra,
+         "{"
+         )
+   else
+     printf("%-*s%s%s\n",
+        thread_indent_depth (entry_p),"",
+        "}",
+        extra)
+}
+
+
+%( $# > 1 %?
+global trace
+probe $2.call {
+  trace[tid()] = 1
+}
+probe $2.return {
+  delete trace[tid()]
+}
+%)
+
+probe $1.call   { trace(4, $$parms) }
+probe $1.return { 
+  trace(-4, $$return) 
+}

@@ -1,3 +1,4 @@
+#stap -vv irq_stats.stp -DSTP_NO_OVERLOAD
 @define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
 global client_id
 global source_id
@@ -38,7 +39,7 @@ probe begin{
 }
 
 
-probe module(@amdgpu).function("vega10_ih_decode_iv").return
+probe module("hydcu").function("amdgpu_ih_decode_iv_helper").return
 {
     cid = @cast(@entry($entry),"struct amdgpu_iv_entry")->client_id
     sid = @cast(@entry($entry),"struct amdgpu_iv_entry")->src_id

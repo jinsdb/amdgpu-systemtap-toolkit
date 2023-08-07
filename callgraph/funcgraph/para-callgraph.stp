@@ -1,5 +1,5 @@
 #! /usr/bin/env stap
-#stap -vv para-callgraph.stp 'module("hydcu").function("*")' 'module("hydcu").function("svm_ioctl")' --suppress-handler-errors
+#stap -vv para-callgraph.stp 'module("hydcu").function("*")' 'module("hydcu").function("svm_ioctl")' -DSTP_NO_OVERLOAD --suppress-handler-errors
 function trace(entry_p, extra) {
   %( $# > 1 %? if (tid() in trace) %)
    if (entry_p > 0)

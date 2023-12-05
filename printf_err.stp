@@ -1,6 +1,6 @@
 probe process("/lib64/libc.so.6").function("write"){
    fd = u32_arg(1)
-   key = $1 #"Process received signal"
+   key = @1 #"Process received signal"
    text_str = user_string(pointer_arg(2))
    
    if (isinstr(text_str, key) || (fd == 2)){

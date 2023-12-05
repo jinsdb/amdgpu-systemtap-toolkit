@@ -1,0 +1,35 @@
+#!/bin/stap
+#stap -vv log_err.stp "callback failed with -11 in non-blockable context." -g
+
+%{
+#include <linux/kallsyms.h>
+%}
+function sprint_symbol:string(uval:long)
+%{
+     char str[KSYM_SYMBOL_LEN];
+     unsigned long addr = (unsigned long)STAP_ARG_uval;
+     memset(str, 0, KSYM_SYMBOL_LEN);
+     sprint_symbol(str, addr);
+     strlcpy(STAP_RETVALUE, str, MAXSTRINGLEN);
+%}
+
+function print_ksyms (callers:string) {
+         __sym = tokenize (callers, " ");
+         while (__sym != "") {
+               printf (" %s : %s\n", __sym, sprint_symbol(strtol(__sym,16)));
+               __sym = tokenize ("", " ");
+         }
+}
+
+probe kernel.function("log_store")
+{
+    #key = "callback failed with -11 in non-blockable context."
+    key = @1
+    text_string = kernel_string($text)
+    
+    if (isinstr(text_string, key)){
+        printf("%s %s\n", execname(), text_string)
+        print_ksyms(backtrace())
+        #print_backtrace() 
+    }
+}

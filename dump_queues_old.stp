@@ -1,0 +1,108 @@
+# stap -vv dump_queues.stp -g -DSTP_NO_OVERLOAD -o queues.log
+
+//@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+%{
+#include <kfd_priv.h>
+
+typedef struct kfd_process *(*pfn_kfd_lookup_process_t)(unsigned int pasid);
+typedef void (*pfn_kfd_unref_process_t)(struct kfd_process *p);
+
+pfn_kfd_lookup_process_t my_lookup_process_by_pasid = NULL;
+pfn_kfd_unref_process_t my_unref_process = NULL;
+
+%}
+
+function kfd_process_queues_dump(pasid:long)
+%{
+    int32_t i, j = 0;
+    uint32_t data = 0;
+    uint64_t queue_address = 0;
+    uint64_t queue_size = 0;
+    struct queue *q = NULL;
+    struct kfd_process *p = NULL;
+    struct process_queue_node *pqn = NULL;
+	
+    char *formart[2] = {"PM4", "AQL"};
+    char *queue_type[5] = {"computer", "sdma", "hiq", "diq", "sdma_xgmi"};
+ 
+    unsigned int pasid = STAP_ARG_pasid;
+    p = my_lookup_process_by_pasid(pasid);
+    if (!p) {
+        _stp_printf("Cannot find process info info for pasid %i\n", pasid);
+        return;
+    }
+    
+    mutex_lock(&p->mutex);
+    list_for_each_entry(pqn, &p->pqm.queues, process_queue_list) {
+        /* TODO: add qid filter
+		if ((pqn->q && pqn->q->properties.queue_id == qid) ||
+		    (pqn->kq && pqn->kq->queue->properties.queue_id == qid))
+			 q = pqn->q;
+        */
+        q = pqn->q;
+        if (q == NULL) {
+            continue;
+        }
+        
+        queue_address = q->properties.queue_address;
+        queue_size    = q->properties.queue_size;
+        if (queue_address != 0) {		
+            _stp_printf("\nDump queue, qid: %d, qtype: %s, formart: %s \n", 
+                   q->properties.queue_id, 
+                   queue_type[q->properties.type],
+                   formart[q->properties.format]);
+			
+            for (i = 0; i < queue_size; i += 4) {
+                if (j%4 == 0) {
+                    _stp_printf("\n0x%016llx: ", queue_address + i);
+                }
+				
+                if (copy_from_user(&data, (const void __user *)(queue_address + i),
+							sizeof(uint32_t))) {
+                    break;
+                }
+				
+                _stp_printf("0x%08x	", data);
+                j++;
+            }
+            
+            _stp_printf("\n");         
+        }
+        
+    }
+	
+    mutex_unlock(&p->mutex);    
+    
+    my_unref_process(p);
+
+%}
+
+function find_proces_ops_init:long()
+%{
+    
+    my_lookup_process_by_pasid = (pfn_kfd_lookup_process_t)kallsyms_lookup_name("kfd_lookup_process_by_pasid");
+    my_unref_process = (pfn_kfd_unref_process_t)kallsyms_lookup_name("kfd_unref_process");
+    if ((my_lookup_process_by_pasid == NULL) || 
+        (my_unref_process == NULL)){
+        _stp_printf("failed to find kfd_lookup_process_by_pasid function.\n");
+        STAP_RETURN(-1); 
+    }
+    
+    _stp_printf("kfd_lookup_process_by_pasid: 0x%lx\n", my_lookup_process_by_pasid);
+    _stp_printf("kfd_unref_process: 0x%lx\n", my_unref_process);
+    STAP_RETURN(0); 
+%}
+
+probe module(@amdgpu).function("kfd_process_vm_fault")
+{   
+    kfd_process_queues_dump($pasid)
+}
+
+probe begin{
+    ret = find_proces_ops_init()
+    if (ret != 0) {
+        exit()
+    }
+}

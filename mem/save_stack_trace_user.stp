@@ -1,0 +1,77 @@
+/*
+-g --ldd -d ~/yuanxiong/hip-helloworld/helloworld -c ~/yuanxiong/hip-helloworld/helloworld
+*/
+%{
+#include <linux/stacktrace.h>
+typedef void (*pfn_save_trace_user_t)(struct stack_trace *trace);
+pfn_save_trace_user_t save_trace_user = NULL;
+
+static void save_stack_user_sprint(char *str, int size)
+{
+    int i;
+    ssize_t count = 0;
+  	struct stack_trace trace;
+    unsigned long entries[32];
+
+    if (save_trace_user == NULL) {
+        save_trace_user = (pfn_save_trace_user_t)kallsyms_lookup_name("save_stack_trace_user");
+        if (save_trace_user == NULL) {
+           _stp_printf("save_trace_user: 0x%lx\n", save_trace_user);
+           return;
+        }
+    }
+
+	trace.skip = 0;
+    trace.nr_entries = 0;
+	trace.entries = entries;
+	trace.max_entries = 32;
+	save_trace_user(&trace);
+	if (trace.nr_entries != 0 &&
+	    trace.entries[trace.nr_entries-1] == ULONG_MAX)
+		trace.nr_entries--;
+        
+    for (i = 0; i < trace.nr_entries; i++) {
+        count += snprintf(str + count, size - count, "0x%lx ", trace.entries[i]);
+    }
+    
+    str[count] = '\0';
+}
+%}
+
+
+function save_stack_trace_user:string() %{
+    save_stack_user_sprint (STAP_RETVALUE, MAXSTRINGLEN);
+%}
+
+
+probe process("/lib64/libc.so.6").function("mmap")
+{
+    printf("begin, save_stack_trace_user:\n")
+    print_syms(save_stack_trace_user());
+    printf("\nnext, ubacktrace:\n")
+    print_usyms(ubacktrace());
+    println("\n")
+}
+//probe kernel.function("do_mmap")
+/*
+probe process("/lib64/libc.so.6").function("mmap")
+{
+    print(save_stack_trace_user());
+    println("\n")
+}
+
+function lookup_save_trace_user:long()
+%{
+    
+    if (save_trace_user == NULL) {
+       _stp_printf("save_trace_user: 0x%lx\n", save_trace_user);
+       STAP_RETURN(-1); 
+    }
+    STAP_RETURN(0); 
+%}
+probe begin{
+    if (lookup_save_trace_user() != 0) {
+        exit()
+    }
+}
+*/

@@ -1,0 +1,79 @@
+global start
+global update_pte_tm
+global cpu_update_cnt
+global cpu_update_tm
+global set_pte_pde_cnt
+global set_pte_pde_tm
+
+@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko"%)
+
+probe module(@amdgpu).function("amdgpu_vm_update_ptes"){
+    sz = $end - $start
+    sz = sz * 4096
+    if (sz == 33558528 && $flags > 0) {
+        start[tid()] = 1
+        printf("%s\n", $$parms)
+    }
+}
+
+probe module(@amdgpu).function("amdgpu_vm_update_ptes").return{
+    if (start[tid()] == 1) {
+        update_pte_tm <<< gettimeofday_us() - @entry(gettimeofday_us())
+    }
+    start[tid()] = 0
+}
+
+probe module(@amdgpu).function("amdgpu_vm_cpu_update").return
+//probe module(@amdgpu).function("amdgpu_vm_map_gart").return
+{
+    if(start[tid()] == 1) {
+        cpu_update_cnt++
+        cpu_update_tm <<< gettimeofday_us() - @entry(gettimeofday_us())
+        //printf("moving: %d\n", $bo->tbo->moving)
+    }
+}
+probe kprobe.module(@amdgpu).function("amdgpu_gmc_set_pte_pde").return
+{
+    if(start[tid()] == 1) {
+        //set_pte_pde_cnt++
+        set_pte_pde_tm <<< gettimeofday_ns() - @entry(gettimeofday_ns())
+    }
+}
+
+probe end{
+    printf("\n\n")
+    printf("amdgpu_vm_update_ptes: count:%d , min: %d, max: %d, avg: %d\n", 
+        @count(update_pte_tm), @min(update_pte_tm), @max(update_pte_tm), @avg(update_pte_tm))
+    printf("amdgpu_vm_cpu_update: count:%d , min: %d, max: %d, avg: %d\n", 
+        @count(cpu_update_tm), @min(cpu_update_tm), @max(cpu_update_tm), @avg(cpu_update_tm))
+    printf("amdgpu_gmc_set_pte_pde: count:%d , min: %d, max: %d, avg: %d\n", 
+        @count(set_pte_pde_tm), @min(set_pte_pde_tm), @max(set_pte_pde_tm), @avg(set_pte_pde_tm))
+}
+
+
+/*
+probe funcs = module(@amdgpu).statement("amdgpu_vm_cpu_update@*:*"){}
+probe funcs
+{ 
+    if (start[tid()] != 1) next
+    tokenize(pp(),"@");
+    fileline=tokenize("","@");
+    file=tokenize(fileline,":\"");
+    line=tokenize("",":\"");
+    curr_time = gettimeofday_us()
+    delt_time = curr_time - last_tm[tid()]
+    last_tm[tid()] = curr_time
+    #printf("[%ld] line:%s\n", delt_time, line)
+    line_spent[last_line[tid()], line] <<< delt_time
+    last_line[tid()] = line 
+}
+
+probe end {
+    printf("\n\n")
+    foreach([last+, line] in line_spent) {
+        printf("line: %s -> %s, spent time: count:%d, min:%d, max:%d, avg:%d\n", 
+            last, line, @count(line_spent[last, line]), @min(line_spent[last, line]), 
+            @max(line_spent[last, line]), @avg(line_spent[last, line]))
+    }
+}
+*/

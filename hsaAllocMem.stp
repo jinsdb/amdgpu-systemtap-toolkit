@@ -1,0 +1,44 @@
+@define libhsakmt %("/home/huangqu/rocm/rocm-lib/lib/libhsakmt.so.1.0.0"%)
+
+function trace(entry_p, extra) {
+    if (entry_p>0) {
+        printf("%-*s%s(%s)%s\n",
+             thread_indent_depth(entry_p),"",
+             ppfunc(),
+             extra,
+		     " {")
+    } else {
+        printf("%-*s%s %s\n",
+             thread_indent_depth(entry_p),"",
+             "}",
+		     extra)
+    }
+
+}
+
+global start_trace = 0
+
+probe process(@libhsakmt).function("hsaKmtAllocMemory"){
+     start_trace = 1
+}
+
+probe process(@libhsakmt).function("hsaKmtAllocMemory").return{
+    start_trace = 0
+}
+
+probe process(@libhsakmt).function("*").call{ 
+   if (start_trace == 0) {
+      next
+   }
+   trace(4, $$parms)
+}
+
+probe process(@libhsakmt).function("*").return {
+   if (start_trace == 0) {
+      next
+   }
+   trace(-4, $$return)
+}
+
+probe begin{printf("Start to collect callgraph...\n")}
+

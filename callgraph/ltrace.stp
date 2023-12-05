@@ -1,0 +1,147 @@
+#! /usr/bin/env stap
+// stap ltrace.stp -DSTP_NO_OVERLOAD -DMAXSKIPPED=100000 -DMAXACTION=100000 -DMAXMAPENTRIES=10000 -w -c '/usr/bin/ls'
+// configuration options
+global follow_fork = 0  // -Gfollow_fork=1 means trace descendant processes too
+global filt_stdlib = 1  // -Gfilt_stdlib=0 means trace calls for stand library
+global print_func  = 1  // -Gprint_func=0 means output dot formart
+
+global parent%[100000]
+global call_graph%[100000]
+
+global _indent_counters
+
+function _thread_indent:long (delta)
+{
+    x = _indent_counters[tid()] + (delta < 0 ? delta : 0)
+    _indent_counters[tid()] += delta
+    return (x>0 ? x : 0)
+}
+
+function trace(func) 
+{
+    /* FIX: 
+     * 1. check hole chain: a -> b ... c -> d, b -> c is miss due to some std lib 
+     * 2. sometimes a -> b, b - >c , ustack(1) will become a -> b, a - >c
+     */
+    #try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
+    depth = _thread_indent(1)
+    pfunc = parent[tid(), depth]
+    if (strlen(pfunc) == 0)
+       pfunc = execname()
+    call_graph[tid(), pfunc, func] = depth  //probefunc()
+    parent[tid(), depth + 1] = func         //next low level parent
+}
+
+function filter_p()
+{
+    if (target() == 0) return 0;
+    if (!follow_fork && pid() != target()) return 1;
+    if (follow_fork && !target_set_pid(pid())) return 1;
+    if (filt_stdlib) {
+        libname = umodname(uaddr())
+        if (libname =~ "libc([-\.0-9]*)\.so") return 1;
+        if (libname =~ "ld([-\.0-9]*)\.so") return 1;
+        if (libname =~ "libstdc++\.so([\.0-9]*)") return 1;
+        if (libname =~ "librocblas\.so([\.0-9]*)") return 1;
+        if (libname =~ "ld-linux-x86-64.so([\.0-9]*)") return 1;
+        if (libname =~ "libpthread.so([\.0-9]*)") return 1;
+        if (libname =~ "libgcc_s.so([\.0-9]*)") return 1;
+        if (libname =~ "librt.so([\.0-9]*)") return 1;
+        if (libname =~ "libz.so([\.0-9]*)") return 1;
+        if (libname =~ "libelf.so([\.0-9]*)") return 1;
+        if (libname =~ "libnuma.so([\.0-9]*)") return 1;
+    }
+    return 0;
+}
+
+probe process.plt, process.library("*").plt 
+{
+    if (filter_p()) next;
+    if (strlen($$name) == 0) next;
+    trace($$name)
+}
+
+probe process.plt.return, process.library("*").plt.return
+{
+    if (filter_p()) next;
+    if (strlen($$name) == 0) next;
+    
+    depth = _thread_indent(-1)
+}
+
+
+function print_thread(tid){
+  printf("/*--------------------------------------------------\n")
+  printf("                     %d                          \n", tid)
+  printf("----------------------------------------------------*/\n")
+}
+
+function print_func()
+{
+    thrid = 0
+    last_depth = -1
+    foreach([t+, pfunc, func] in call_graph) {
+        depth = call_graph[t, pfunc, func]
+        if (thrid != t) {
+            if (thrid != 0){
+               #printf("}\n")
+               for(i = last_depth; i >= 0; i-=2) {
+                 printf("%s}\n", sprintf("%-*s", i, ""))
+               }
+               last_depth = -1
+            }
+            print_thread(t)
+            thrid = t
+        }
+        if(depth == last_depth) {
+           printf("%s}\n", sprintf("%-*s", last_depth, ""))
+        } else if (depth < last_depth){
+           for(i = last_depth; i >= depth; i-=2) {
+             printf("%s}\n", sprintf("%-*s", i, ""))
+           }
+        }
+        if (depth - last_depth > 2) { //fix lost something
+            for(i = last_depth + 2; i < depth; i+=2) {
+              printf("%s{\n", sprintf("%-*s", i, ""))
+            }
+        }
+        printf("%s%s(){\n", sprintf("%-*s", depth, ""), func)
+        last_depth = depth
+    }
+    #printf("}\n")
+    for(i = last_depth; i >= 0; i-=2) {
+        printf("%s}\n", sprintf("%-*s", i, ""))
+    }
+}
+
+function print_header()
+{
+	printf("digraph G{\n")
+	printf("\trankdir=TB;\n")
+	printf("\tsize=\"1920,1080\"\n");
+	printf("\tnode [fontsize=12,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box height=.3 ordering=out];\n")
+}
+
+function print_dot()
+{
+    thrid = 0
+    foreach([t+, caller, func] in call_graph) {
+        if (thrid != t) {
+            if (thrid != 0){
+                printf("}\n")
+            }
+            print_header()
+            thrid = t
+        }
+        printf("\"%s\"->\"%s\";\n", caller, func)
+    }
+    printf("}\n")
+}
+
+probe end
+{
+    if (print_func)
+      print_func()
+    else
+      print_dot()
+}

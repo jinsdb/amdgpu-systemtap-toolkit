@@ -1,0 +1,305 @@
+# dump kfdioctl args
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+%{
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+#include <uapi/linux/kfd_ioctl.h>
+%}
+
+function get_dev_list:string (array_ptr:long, dev_num:long) %{
+	long err = 0;
+	int i = 0;
+	int n = 0;
+    uint32_t *devices_arr;
+	
+	devices_arr = kmalloc_array(STAP_ARG_dev_num, sizeof(*devices_arr),
+				    GFP_KERNEL);
+	if (!devices_arr)
+		return ;
+		
+	err = copy_from_user(devices_arr,
+			     (void __user *)STAP_ARG_array_ptr,
+			     STAP_ARG_dev_num * sizeof(*devices_arr));
+				 
+	if (err != 0) {
+		kfree(devices_arr);
+		return;
+	}
+	
+	for (i = 0; i < STAP_ARG_dev_num; i++) {
+		n += snprintf(STAP_RETVALUE+n, MAXSTRINGLEN,
+                        "gpuid: 0x%x\n", devices_arr[i]);
+	}
+	
+	kfree(devices_arr);
+
+%}
+
+probe begin{printf("Start to dump kfd_ioctl args\n")}
+
+//struct kfd_ioctl_alloc_memory_of_gpu_args {
+//	__u64 va_addr;		/* to KFD */
+//	__u64 size;		/* to KFD */
+//	__u64 handle;		/* from KFD */
+//	__u64 mmap_offset;	/* to KFD (userptr), from KFD (mmap offset) */
+//	__u32 gpu_id;		/* to KFD */
+//	__u32 flags;
+//};
+
+// kfd_ioctl_alloc_memory_of_gpu
+probe module(@amdgpu).function("kfd_ioctl_alloc_memory_of_gpu")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+    printf("kfd_ioctl_alloc_memory_of_gpu, enter gpu_args:\n")
+	gargs = &@cast($data, "struct kfd_ioctl_alloc_memory_of_gpu_args")
+    printf("args->va_addr = %08lx\n", gargs->va_addr)
+	printf("args->size    = %08x\n", gargs->size)
+	printf("args->handle  = %08lx\n", gargs->handle)
+	printf("args->mmap_offset = %09lx\n", gargs->mmap_offset)
+	printf("args->gpu_id  = %08lx\n", gargs->gpu_id)
+	printf("args->flags   = %08lx\n", gargs->flags)
+    printf("\n")
+}
+
+probe module(@amdgpu).function("kfd_ioctl_alloc_memory_of_gpu").return
+{
+    pdata = @entry($data)
+	printf("kfd_ioctl_alloc_memory_of_gpu, exit gpu_args:\n")
+    gargs = &@cast(pdata, "struct kfd_ioctl_alloc_memory_of_gpu_args")
+    printf("args->va_addr = %08lx\n", gargs->va_addr)
+	printf("args->size    = %08x\n", gargs->size)
+	printf("args->handle  = %08lx\n", gargs->handle)
+	printf("args->mmap_offset = %09lx\n", gargs->mmap_offset)
+	printf("args->gpu_id  = %08lx\n", gargs->gpu_id)
+	printf("args->flags   = %08lx\n", gargs->flags)
+    printf("\n")
+             
+}
+
+// kfd_ioctl_free_memory_of_gpu
+probe module(@amdgpu).function("kfd_ioctl_free_memory_of_gpu")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+    printf("kfd_ioctl_free_memory_of_gpu, enter gpu_args:\n")
+	gargs = &@cast($data, "struct kfd_ioctl_free_memory_of_gpu_args")
+	printf("args->handle  = %09lx\n", gargs->handle)
+    printf("\n")
+}
+
+//struct kfd_ioctl_map_memory_to_gpu_args {
+//	__u64 handle;			/* to KFD */
+//	__u64 device_ids_array_ptr;	/* to KFD */
+//	__u32 n_devices;		/* to KFD */
+//	__u32 n_success;		/* to/from KFD */
+//};
+
+// kfd_ioctl_map_memory_to_gpu
+probe module(@amdgpu).function("kfd_ioctl_map_memory_to_gpu")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_map_memory_to_gpu, enter args:\n")
+	gargs  = &@cast($data, "struct kfd_ioctl_map_memory_to_gpu_args")
+	mhandle = gargs->handle
+	dev_arr = gargs->device_ids_array_ptr
+	dev_num = gargs->n_devices
+	dev_str = get_dev_list(dev_arr, dev_num)
+	printf("args->handle = %lx\n",  mhandle)
+	printf("args->n_success = %d\n", gargs->n_success)
+	printf("args->device_ids, %d devs :\n", dev_num)
+	printf("%s\n", dev_str)
+	
+}
+
+probe module(@amdgpu).function("kfd_ioctl_map_memory_to_gpu").return
+{
+	rdata = @entry($data)
+	gargs = &@cast(rdata, "struct kfd_ioctl_map_memory_to_gpu_args")
+	printf("kfd_ioctl_map_memory_to_gpu return,args:\n")
+	printf("args->handle = %lx\n", gargs->handle)
+	printf("args->n_success = %d\n", gargs->n_success)
+
+}
+
+//kfd_ioctl_unmap_memory_from_gpu
+probe module(@amdgpu).function("kfd_ioctl_unmap_memory_from_gpu")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_unmap_memory_from_gpu, enter args:\n")
+	gargs  = &@cast($data, "struct kfd_ioctl_unmap_memory_from_gpu_args")
+	mhandle = gargs->handle
+	dev_arr = gargs->device_ids_array_ptr
+	dev_num = gargs->n_devices
+	dev_str = get_dev_list(dev_arr, dev_num)
+	printf("args->handle = %lx\n",  mhandle)
+	printf("args->n_success = %d\n", gargs->n_success)
+	printf("args->device_ids, %d devs :\n", dev_num)
+	printf("%s\n", dev_str)
+	
+}
+
+probe module(@amdgpu).function("kfd_ioctl_unmap_memory_from_gpu").return
+{
+	rdata = @entry($data)
+	gargs = &@cast(rdata, "struct kfd_ioctl_unmap_memory_from_gpu_args")
+	printf("kfd_ioctl_unmap_memory_from_gpu return,args:\n")
+	printf("args->handle = %lx\n", gargs->handle)
+	printf("args->n_success = %d\n", gargs->n_success)
+
+}
+
+//kfd_ioctl_create_queue
+//struct kfd_ioctl_create_queue_args {
+//	__u64 ring_base_address;	/* to KFD */
+//	__u64 write_pointer_address;	/* from KFD */
+//	__u64 read_pointer_address;	/* from KFD */
+//	__u64 doorbell_offset;	/* from KFD */
+//
+//	__u32 ring_size;		/* to KFD */
+//	__u32 gpu_id;		/* to KFD */
+//	__u32 queue_type;		/* to KFD */
+//	__u32 queue_percentage;	/* to KFD */
+//	__u32 queue_priority;	/* to KFD */
+//	__u32 queue_id;		/* from KFD */
+//
+//	__u64 eop_buffer_address;	/* to KFD */
+//	__u64 eop_buffer_size;	/* to KFD */
+//	__u64 ctx_save_restore_address; /* to KFD */
+//	__u32 ctx_save_restore_size;	/* to KFD */
+//	__u32 ctl_stack_size;		/* to KFD */
+//};
+
+probe module(@amdgpu).function("kfd_ioctl_create_queue").return
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_create_queue, enter args:\n")
+	gargs  = &@cast(@entry($data), "struct kfd_ioctl_create_queue_args")
+	printf("gpu_id: %d\n", gargs->gpu_id)
+	printf("ring_base_address: %lx\n", gargs->ring_base_address)
+	printf("write_pointer_address: %lx\n", gargs->write_pointer_address)
+	printf("read_pointer_address: %lx\n", gargs->read_pointer_address)
+	printf("doorbell_offset: %lx\n", gargs->doorbell_offset)
+	printf("ring_size: %d\n", gargs->ring_size)
+	printf("queue_type: %d\n", gargs->queue_type)
+	printf("queue_percentage: %d\n", gargs->queue_percentage)
+	printf("queue_priority: %d\n", gargs->queue_priority)	
+	printf("queue_id: %d\n", gargs->queue_id)
+	printf("eop_buffer_address: %lx\n", gargs->eop_buffer_address)
+	printf("eop_buffer_size: %d\n", gargs->eop_buffer_size)
+	printf("ctx_save_restore_address: %lx\n", gargs->ctx_save_restore_address)
+	printf("ctx_save_restore_size: %d\n", gargs->ctx_save_restore_size)
+	printf("ctl_stack_size: %d\n", gargs->ctl_stack_size)
+	
+}
+//kfd_ioctl_destroy_queue
+probe module(@amdgpu).function("kfd_ioctl_destroy_queue")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_destroy_queue,enter args:\n")
+	gargs  = &@cast($data, "struct kfd_ioctl_destroy_queue_args")
+	printf("queue_id: %d \n", gargs->queue_id);
+}
+
+//struct kfd_ioctl_update_queue_args {
+//	__u64 ring_base_address;	/* to KFD */
+//
+//	__u32 queue_id;		/* to KFD */
+//	__u32 ring_size;		/* to KFD */
+//	__u32 queue_percentage;	/* to KFD */
+//	__u32 queue_priority;	/* to KFD */
+//};
+probe module(@amdgpu).function("kfd_ioctl_update_queue")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_update_queue_args, enter args:\n")
+	gargs  = &@cast($data, "struct kfd_ioctl_update_queue_args")
+	printf("ring_base_address: %lx\n", gargs->ring_base_address)
+	printf("queue_id: %d\n", gargs->queue_id)
+	printf("ring_size: %d\n", gargs->ring_size)
+	printf("queue_percentage: %d\n", gargs->queue_percentage)
+	printf("queue_priority: %d\n", gargs->queue_priority)
+}
+
+//struct kfd_ioctl_acquire_vm_args {
+//	__u32 drm_fd;	/* to KFD */
+//	__u32 gpu_id;	/* to KFD */
+//};
+probe module(@amdgpu).function("kfd_ioctl_acquire_vm")
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_acquire_vm, args:\n")
+	gargs  = &@cast($data, "struct kfd_ioctl_acquire_vm_args")
+	printf("drm_fd: %d\n", gargs->drm_fd)
+	printf("gpu_id: %d\n", gargs->gpu_id)
+}
+
+//#define NUM_OF_SUPPORTED_GPUS 7
+//struct kfd_ioctl_get_process_apertures_args {
+//	struct kfd_process_device_apertures
+//			process_apertures[NUM_OF_SUPPORTED_GPUS];/* from KFD */
+//
+//	/* from KFD, should be in the range [1 - NUM_OF_SUPPORTED_GPUS] */
+//	__u32 num_of_nodes;
+//	__u32 pad;
+//};
+
+probe module(@amdgpu).function("kfd_ioctl_get_process_apertures").return
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_get_process_apertures, return args:\n")
+	gargs  = &@cast(@entry($data), "struct kfd_ioctl_get_process_apertures_args")
+	nodes = gargs->num_of_nodes
+	printf("num_of_nodes: %d\n", nodes)
+	for (i = 0; i < nodes; i++) {
+		apterture = &@cast(gargs->process_apertures, "struct kfd_process_device_apertures")[i]
+		printf("lds_base: %lx \n", apterture->lds_base)
+		printf("lds_limit: %lx \n", apterture->lds_limit)
+		printf("scratch_base: %lx \n", apterture->scratch_base)
+		printf("scratch_limit: %lx \n", apterture->scratch_limit)
+		printf("gpuvm_base: %lx \n", apterture->gpuvm_base)
+		printf("gpuvm_limit: %lx \n", apterture->gpuvm_limit)
+		printf("gpu_id: %d \n", apterture->gpu_id)
+	}
+	
+}
+
+
+//struct kfd_ioctl_get_process_apertures_new_args {
+//	/* User allocated. Pointer to struct kfd_process_device_apertures
+//	 * filled in by Kernel
+//	 */
+//	__u64 kfd_process_device_apertures_ptr;
+//	/* to KFD - indicates amount of memory present in
+//	 *  kfd_process_device_apertures_ptr
+//	 * from KFD - Number of entries filled by KFD.
+//	 */
+//	__u32 num_of_nodes;
+//	__u32 pad;
+//};
+//nothing to do
+
+/*
+probe module(@amdgpu).function("kfd_ioctl_get_process_apertures_new_args").return
+{
+	printf("==================%s(%d)=====================\n", execname(), pid())
+	printf("kfd_ioctl_get_process_apertures_new_args, args:\n")
+	gargs  = &@cast(@entry($data), "struct kfd_ioctl_get_process_apertures_new_args")
+    nodes = gargs->num_of_nodes
+	printf("num_of_nodes: %d\n", nodes)
+    for (i = 0; i < nodes; i++) {
+    
+    }
+	
+}
+*/
+
+probe module(@amdgpu).function("kfd_ioctl_set_scratch_backing_va")
+{
+    printf("==================%s(%d)=====================\n", execname(), pid())
+    printf("kfd_ioctl_set_scratch_backing_va, args:\n")
+	args  = &@cast($data, "struct kfd_ioctl_set_scratch_backing_va_args")
+    printf("set gpu_id: %d,  va: %lx\n", args->gpu_id, args->va_addr)
+    
+}
+

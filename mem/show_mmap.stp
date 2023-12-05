@@ -1,0 +1,108 @@
+# stap -vv show_mmap.stp -g -DSTP_NO_OVERLOAD -DMAXMAPENTRIES=10000 -DMAXACTION=102400 -o hpl.log
+%{
+  #include <linux/pfn_t.h>
+%}
+@define AMDGPU_PDE_PTE %(1 << 54%)
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+global vm_start
+global vm_last
+global phy_address%[20000]
+global pte_idx
+global level
+global update_pte
+
+probe module(@amdgpu).function("amdgpu_vm_bo_update_mapping")
+{
+    flg = $flags
+    if (flg & 1) {
+        if (flg & (1 << 1)) { /* system memory */
+          update_pte[tid()] = 1
+        } else {
+          update_pte[tid()] = 2 /*VRAM*/
+        }
+    }
+}
+
+probe module(@amdgpu).function("amdgpu_vm_update_ptes")
+{
+    if (update_pte[tid()] != 1 && update_pte[tid()] != 2)
+        next;    
+    vm_start[tid()] = $start
+    vm_last[tid()]  = $end
+
+}
+
+probe module(@amdgpu).function("amdgpu_vm_cpu_update")
+{
+    if (update_pte[tid()] != 1 && update_pte[tid()] != 2)
+        next;
+    pte_idx[tid()] = $pe/8
+}
+
+/*
+probe kprobe.module(@amdgpu).function("gmc_v9_0_get_vm_pde")
+{
+    if (update_pte[tid()] != 1 && update_pte[tid()] != 2)
+        next;
+    level[tid()] = s32_arg(2)
+}
+*/
+
+probe module(@amdgpu).function("amdgpu_vm_level_shift")
+{
+    if (update_pte[tid()] != 1 && update_pte[tid()] != 2)
+        next;
+    level[tid()] = $level + 1 /*last shift level -1 in amdgpu_vm_update_ptes*/
+}
+
+probe kprobe.module(@amdgpu).function("amdgpu_gmc_set_pte_pde")
+{
+    if (update_pte[tid()] != 1 && update_pte[tid()] != 2)
+        next;
+    flags = u64_arg(5) #bit0 valid
+    if(flags & 1) {
+       idx  = u32_arg(3) + pte_idx[tid()]
+       addr = u64_arg(4)
+       l  = level[tid()]
+       phy_address[tid(), l, idx, addr, flags]++
+    }
+}
+
+
+
+probe module(@amdgpu).function("amdgpu_vm_bo_update_mapping").return
+{
+   if (update_pte[tid()] != 1 &&  update_pte[tid()] != 2)
+        next;  
+        
+   printf("\n%s vm_start: 0x%016x, vm_last: 0x%016x, cnt: %d %s\n",
+            execname(), vm_start[tid()]<<12, vm_last[tid()]<<12,
+            vm_last[tid()] - vm_start[tid()], update_pte[tid()] == 1? "SMem": "VRAM")
+   foreach([t, l, i, a, f] in phy_address){
+      if (t == tid()){
+         printf(" [l%d-%03d] phy addr: 0x%016x, flags: 0x%016x\n", l, i, a, f)
+      }
+   }
+   printf("\n")
+   delete phy_address[tid(),*,*,*,*]
+   delete vm_start[tid()]
+   delete vm_last[tid()]
+   update_pte[tid()] = 0
+}
+
+/*
+probe kprobe.function("vm_insert_pfn"),kprobe.function("vm_insert_mixed")
+{
+    flags  = %{~PFN_FLAGS_MASK%}
+    v_addr = u64_arg(2)
+    p_addr = (u64_arg(3)&flags)*4096
+    printf("%s mmap vaddr: 0x%016x, phy_addr: 0x%016x\n", execname(), v_addr, p_addr)
+}
+
+probe kprobe.module(@amdgpu).function("amdgpu_ttm_io_mem_pfn").return
+{
+   printf("bus address:0x%016x\n", returnval())
+}
+*/

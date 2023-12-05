@@ -1,0 +1,100 @@
+/*
+source code:
+static inline void *kcl_file_private(const struct file *f)
+{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	return f->private_data;
+#else
+	return f->f_inode->i_private;
+#endif
+}
+
+static ssize_t amdgpu_debugfs_regs_smc_read(struct file *f, char __user *buf,
+					size_t size, loff_t *pos)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)kcl_file_private(f);
+	ssize_t result = 0;
+	int r;
+
+	if (size & 0x3 || *pos & 0x3)
+		return -EINVAL;
+
+	while (size) {
+		uint32_t value;
+
+		value = RREG32_SMC(*pos);
+		r = put_user(value, (uint32_t *)buf);
+		if (r)
+			return r;
+
+		result += 4;
+		buf += 4;
+		*pos += 4;
+		size -= 4;
+	}
+
+	return result;
+}
+--------------------
+output:
+f=0xffff8eaa11634700 buf=0x7f856b117000 size=0x20000 pos=0xffffaa52861dfef8 
+amdgpu->smc_rreg:0xffffffffc08867e0 amdgpu_invalid_wreg
+
+*/
+
+probe module("./amdgpu.ko").function("amdgpu_debugfs_regs_smc_read") {
+    printf("%s \n", $$parms)
+    
+	pri = @cast($f, "struct file","kernel<linux/fs.h>")->f_inode->i_private
+    
+	smc_rreg = @cast(pri, "struct amdgpu_device")->smc_rreg
+	
+    printf("amdgpu->smc_rreg:%p, %s\n", smc_rreg, symname(smc_rreg))
+	
+}
+
+
+/*
+Don't want to try embedded C in amdgpu, will meet with the trouble of Makefile
+%{
+   #include </root/huangqu/rock-kernel-refactory/amdgpu-2.4-25.el7/amd/amdgpu/amdgpu.h>
+%}
+
+function amdgpu_ttm_adev:long(bdev:long)%{
+	STAP_RETURN(container_of((struct ttm_bo_device *)STAP_ARG_bdev, struct amdgpu_device, mman.bdev));
+%}
+#global bdev
+#adev = %{&container_of((struct ttm_bo_device *)STAP_GLOBAL_GET_bdev(), struct amdgpu_device, mman.bdev)%}
+*/
+
+/*
+*  &@container_of....
+*/
+
+probe module("amdgpu").function("amdgpu_gmc_agp_addr").return {
+
+    ttm = &@container_of(@entry($bo->ttm), "struct ttm_dma_tt", ttm)
+
+    bdev = @entry($bo->bdev)
+    pmman = &@container_of(bdev, "struct amdgpu_mman", bdev)
+    adev  = &@container_of(pmman, "struct amdgpu_device", mman)
+
+    printf("adev->gmc.agp_start: 0x%016lx\n", adev->gmc->agp_start)
+    printf("adev->gmc.agp_size : 0x%016lx\n", adev->gmc->agp_size)
+    printf("ttm->dma_address[0]: 0x%016lx\n", ttm->dma_address[0])
+    if ($return != -1) {
+        printf("agp_addr:0x%016lx\n",adev->gmc->agp_start + ttm->dma_address[0])
+    } else {
+        printf("amdgpu_gmc_agp_addr return: 0x%lx\n", $return)
+	}
+}
+
+
+global mfree
+probe module("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko").function("amdgpu_vram_mgr_new").return{
+ vmgr = &@module_container_of(@entry($man),"hydcu", "struct amdgpu_vram_mgr", manager)
+ mfree <<< @entry($man->size) - (vmgr->usage->counter>>12)
+}
+
+
+

@@ -1,0 +1,14 @@
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+//The function is equal to:
+//c->kregs->ax = STAP_ARG_val
+function set_returnval(val:long)
+%{
+   k_store_register(0, STAP_ARG_val);
+%}
+
+probe kprobe.module(@amdgpu).function("amdgpu_bo_evict_vram").return{ 
+   printf("set retval to 100!\n")
+   //%{c->kregs->ax = 100%}
+   set_returnval(100)
+}

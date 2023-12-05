@@ -1,0 +1,81 @@
+#stap -vv irq_stats.stp -DSTP_NO_OVERLOAD
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+global client_id
+global source_id
+global client_name
+
+probe begin{
+   client_name[0x0] = "IH"
+   client_name[0x1] = "ACP"
+   client_name[0x2] = "ATHUB"
+   client_name[0x3] = "BIF"
+   client_name[0x4] = "DCE"
+   client_name[0x5] = "ISP"
+   client_name[0x6] = "ISP"
+   client_name[0x7] = "RLC"
+   client_name[0x8] = "SDMA0"
+   client_name[0x9] = "SDMA1"
+   client_name[0x0a] = "SE0SH"
+   client_name[0x0b] = "SE1SH"
+   client_name[0x0c] = "SE2SH"
+   client_name[0x0d] = "SE3SH"
+   client_name[0x0e] = "SYSHUB"
+   client_name[0x0f] = "THM"
+   client_name[0x10] = "UVD"
+   client_name[0x11] = "VCE0"
+   client_name[0x12] = "VMC"
+   client_name[0x13] = "XDMA"
+   client_name[0x14] = "GRBM_CP"
+   client_name[0x15] = "ATS"
+   client_name[0x16] = "ROM_SMUIO"
+   client_name[0x17] = "DF"
+   client_name[0x18] = "VCE1"
+   client_name[0x19] = "PWR"
+   client_name[0x1b] = "UTCL2"
+   client_name[0x1c] = "EA"
+   client_name[0x1d] = "UTCL2LOG"
+   client_name[0x1e] = "MP0"
+   client_name[0x1f] = "MP1"
+}
+
+
+probe module("hydcu").function("amdgpu_ih_decode_iv_helper").return
+{
+    cid = @cast(@entry($entry),"struct amdgpu_iv_entry")->client_id
+    sid = @cast(@entry($entry),"struct amdgpu_iv_entry")->src_id
+    client_id[cid]++
+    source_id[cid, sid]++
+    // SE0SH ~ SE3SH
+    /*
+    if (cid == 0x0a || cid == 0x0b ||
+        cid == 0x0c || cid == 0x0d) {
+       printf("dw4: 0x%x\n", @cast(@entry($entry->src_data), "int")[0])
+       printf("dw5: 0x%x\n", @cast(@entry($entry->src_data), "int")[1])
+       printf("dw6: 0x%x\n", @cast(@entry($entry->src_data), "int")[2])
+       printf("dw7: 0x%x\n", @cast(@entry($entry->src_data), "int")[3])
+    }
+    */
+}
+
+probe procfs("irq_stats").read { 
+    foreach ([id+] in client_id) {
+        $value .= sprintf("irq: %s  count:%d\n", client_name[id], client_id[id])
+    }
+    
+    foreach ([cid, sid] in source_id) {
+        $value .= sprintf("irq: %s  sourceid: 0x%x, count:%d\n", client_name[cid], sid, source_id[cid, sid])
+    }
+}
+
+probe end {
+
+    foreach ([id+] in client_id) {
+        printf("client: %d (%s)  count:%d\n", id, client_name[id], client_id[id])
+    }
+    
+    foreach ([cid, sid] in source_id) {
+        printf("client: 0x%x (%s)  sourceid: %d, count:%d\n", cid, client_name[cid], sid, source_id[cid, sid])
+    }
+    
+    printf("\n\n")
+}

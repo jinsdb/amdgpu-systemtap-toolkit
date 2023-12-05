@@ -1,0 +1,47 @@
+
+//@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+@define amdgpu %("/lib/modules/4.15.0-20-generic/updates/dkms/amdgpu.ko"%)
+
+global signed
+function send_signal_tstp(pid:long)
+%{
+   struct task_struct *task = NULL;
+   struct pid *pid = NULL;
+   pid = find_get_pid((pid_t)STAP_ARG_pid);
+   if (pid) {
+     task = get_pid_task(pid, PIDTYPE_PID);
+     if (task) { 
+        _stp_printf("send sig SIGTSTP to pid:%ld\n", STAP_ARG_pid);
+        if (signed[pid] != 1) {
+            send_sig(SIGTSTP, task, 0);
+        }
+        signed[pid] = 1
+        put_task_struct(task);
+     }
+     put_pid(pid);
+   }
+%}
+
+
+probe module(@amdgpu).statement("gmc_v9_0_process_interrupt@gmc_v9_0.c:379")
+{
+    printf("gmc_v9_0_process_interrupt@gmc_v9_0.c:379\n")
+    send_signal_tstp($task_info->pid)
+}
+
+/*
+global mc_addr_is_fault = 0
+probe module(@amdgpu).function("gmc_v9_0_process_interrupt").return {
+    if ($return == 0) {
+            printf("gmc_v9_0_process_interrupt\n")
+	    mc_addr_is_fault = 1
+	}
+}
+
+probe module(@amdgpu).function("kfd_ioctl"){
+	if (mc_addr_is_fault == 1) {
+		printf("send sig SIGTSTP to pid:%d\n", task_pid(%{current%}))
+		%{send_sig(SIGTSTP, current, 0)%}
+	}
+}
+*/

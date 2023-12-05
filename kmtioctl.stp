@@ -1,0 +1,13 @@
+global ioctl_tm
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("kmtIoctl").return {
+    cmd = @entry(ulong_arg(2))
+    printf("cmd = %x ,return: %d\n", cmd, returnval())
+    ioctl_tm[cmd] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+probe end{
+    printf("\n")
+    foreach(cmd in ioctl_tm) {
+        printf("cmd: %x, count:%d, min: %d, max: %d, avg: %d\n", 
+        cmd, @count(ioctl_tm[cmd]), @min(ioctl_tm[cmd]), @max(ioctl_tm[cmd]), @avg(ioctl_tm[cmd]))
+    }
+}

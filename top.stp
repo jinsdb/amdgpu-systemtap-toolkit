@@ -1,0 +1,109 @@
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+//@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+%{
+#ifndef STAP_OVERRIDE_STUCK_CONTEXT
+  #define STAP_OVERRIDE_STUCK_CONTEXT 1
+#endif
+
+#include <kfd_priv.h>
+#include <amdgpu_vm.h>
+
+typedef struct hlist_head (*p_kfd_processes_table_t)[32];
+
+p_kfd_processes_table_t p_kfd_processes_table = NULL;
+
+struct srcu_struct *p_kfd_processes_srcu = NULL;
+
+DEFINE_HASHTABLE(my_processes_table, 5);
+
+%}
+
+function kfd_process_table_init:long()
+%{
+    
+    p_kfd_processes_table = (p_kfd_processes_table_t)kallsyms_lookup_name("kfd_processes_table");
+    p_kfd_processes_srcu = (struct srcu_struct *)kallsyms_lookup_name("kfd_processes_srcu");
+
+    if ((p_kfd_processes_table == NULL) || 
+        (p_kfd_processes_srcu == NULL)){
+        _stp_printf("Failed to find kfd_processes_table function.\n");
+        STAP_RETURN(-1); 
+    }
+    
+    _stp_printf("kfd_processes_table: 0x%lx\n", p_kfd_processes_table);
+    _stp_printf("kfd_processes_srcu: 0x%lx\n", p_kfd_processes_srcu);
+    STAP_RETURN(0); 
+%}
+
+function kfd_process_dump()
+%{
+	struct kfd_process *p;
+	unsigned int temp;
+    struct amdgpu_bo *pd = NULL;
+    struct amdgpu_vm *avm = NULL;
+    struct kfd_process_device *pdd = NULL;
+    struct amdkfd_process_info *process_info;
+    struct task_struct *task;
+    
+    int idx = srcu_read_lock(p_kfd_processes_srcu);
+    
+    memcpy(&my_processes_table, p_kfd_processes_table, sizeof(kfd_processes_table));
+    
+    hash_for_each_rcu(my_processes_table, temp, p, kfd_processes) {
+        mutex_lock(&p->mutex);
+        process_info = (struct amdkfd_process_info *)p->kgd_process_info;
+        if (process_info == NULL){
+            mutex_unlock(&p->mutex);
+            continue;
+        }
+        
+        task = get_pid_task(process_info->pid, PIDTYPE_PID);
+        _stp_printf("----------------------------------------------------"
+                    "--------------------------------\n");
+        _stp_printf("process: 0x%016lx, ", p);
+        _stp_printf("pid: %-5d, ", pid_nr(process_info->pid));
+        _stp_printf("comm : %-12s, ", task?task->comm:"unkown");
+        _stp_printf("pasid : %-5d, ", p->pasid);
+        _stp_printf("vms : %-2d \n", process_info->n_vms);
+        put_task_struct(task);
+        _stp_printf("-----------------------------------------------------"
+                    "--------------------------------\n");
+        list_for_each_entry(pdd, &p->per_device_data, per_device_list){
+                avm = (struct amdgpu_vm *)(pdd->vm);
+                pd = avm?avm->root.base.bo: NULL;
+          		_stp_printf("gpu_id       : %d \n", pdd->dev->id);
+                _stp_printf("page_table_base: 0x%lx, kptr: 0x%lx\n", 
+                             avm->pd_phys_addr, pd? pd->kmap.virtual:0x0);
+                _stp_printf("queue_count  : %d \n", pdd->qpd.queue_count);
+                _stp_printf("lds_base     : 0x%lx \n", pdd->lds_base);
+                _stp_printf("lds_limit    : 0x%lx \n", pdd->lds_limit);
+                _stp_printf("gpuvm_base   : 0x%lx \n", pdd->gpuvm_base);
+                _stp_printf("gpuvm_limit  : 0x%lx \n", pdd->gpuvm_limit);
+                _stp_printf("scratch_base : 0x%lx \n", pdd->scratch_base);
+                _stp_printf("scratch_limit: 0x%lx \n", pdd->scratch_limit);
+                _stp_printf("\n");
+        } 
+        
+        mutex_unlock(&p->mutex);
+   }
+
+   srcu_read_unlock(p_kfd_processes_srcu, idx);
+   
+%}
+
+probe begin{
+    ret = kfd_process_table_init()
+    if (ret != 0) {
+        exit()
+    }
+    
+    kfd_process_dump()
+    
+}
+
+/*
+probe end {
+   kfd_process_dump()
+}
+*/

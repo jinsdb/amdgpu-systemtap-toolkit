@@ -1,0 +1,52 @@
+/*
+0xffffffffc059ec30 : amdgpu_vm_cpu_update+0x0/0xe0 [amdgpu]
+0xffffffffc0590bfe : amdgpu_vm_update_ptes+0x2de/0x720 [amdgpu]
+0xffffffffc05910ef : amdgpu_vm_bo_update_mapping+0xaf/0xd0 [amdgpu]
+0xffffffffc0592571 : amdgpu_vm_bo_update+0x391/0x7f0 [amdgpu]
+0xffffffffc05cf22b : update_gpuvm_pte.isra.7+0x1b/0x50 [amdgpu]
+0xffffffffc05d1ad3 : amdgpu_amdkfd_gpuvm_map_memory_to_gpu+0x3c3/0x6d0 [amdgpu]
+0xffffffffc05b77c3 : kfd_ioctl_map_memory_to_gpu+0x183/0x420 [amdgpu]
+
+kfd_ioctl_map_memory_to_gpu filep=0xffff8807b9780100 p=0xffff8807d8837000 data=0xffff880731f83df8
+amdgpu_amdkfd_gpuvm_map_memory_to_gpu kgd=0xffff8807a1220000 mem=0xffff8807d678ee00 vm=0xffff8807d9297000
+update_gpuvm_pte.isra.7 
+amdgpu_vm_bo_update adev=0xffff8807a1220000 bo_va=0xffff8807dd765800 clear=0x0
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843d800 last=0x2b843d9ff flags=0x600000000000077 addr=0x751000000 pages_addr=0x0 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843d800 end=0x2b843da00 dst=0x751000000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8800799e0000 pe=0xf60 addr=0x751000000 count=0x1 incr=0x200000 flags=0x6400000000004f7
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843da00 last=0x2b843dbff flags=0x600000000000077 addr=0x75c00000 pages_addr=0x0 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843da00 end=0x2b843dc00 dst=0x75c00000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8800799e0000 pe=0xf68 addr=0x75c00000 count=0x1 incr=0x200000 flags=0x6400000000004f7
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843dc00 last=0x2b843dfff flags=0x600000000000077 addr=0x74e400000 pages_addr=0x0 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843dc00 end=0x2b843e000 dst=0x74e400000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8800799e0000 pe=0xf70 addr=0x74e400000 count=0x2 incr=0x200000 flags=0x640000000000577
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843e000 last=0x2b843e3ff flags=0x600000000000077 addr=0x737800000 pages_addr=0x0 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843e000 end=0x2b843e400 dst=0x737800000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8800799e0000 pe=0xf80 addr=0x737800000 count=0x2 incr=0x200000 flags=0x640000000000577
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843e400 last=0x2b843e7ff flags=0x600000000000077 addr=0x737400000 pages_addr=0x0 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843e400 end=0x2b843e800 dst=0x737400000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8800799e0000 pe=0xf90 addr=0x737400000 count=0x2 incr=0x200000 flags=0x640000000000577
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843e800 last=0x2b843ebff flags=0x600000000000077 addr=0x75d400000 pages_addr=0x0 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843e800 end=0x2b843ec00 dst=0x75d400000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8800799e0000 pe=0xfa0 addr=0x75d400000 count=0x2 incr=0x200000 flags=0x640000000000577
+amdgpu_vm_bo_update_mapping adev=0xffff8807a1220000 vm=0xffff8807d9297000 direct=0x0 exclusive=0x0 start=0x2b843ec00 last=0x2b843ed44 flags=0x600000000000077 addr=0x1400000 pages_addr=0xffffc90004074a28 fence=0xffff8807dd765838
+amdgpu_vm_update_ptes params=0xffff880731f83af8 start=0x2b843ec00 end=0x2b843ed45 dst=0x1400000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83988 bo=0xffff8807d74ff400 pe=0x0 addr=0x0 count=0x200 incr=0x0 flags=0x10
+amdgpu_vm_cpu_update p=0xffff880731f83af8 bo=0xffff8807d74ff400 pe=0x0 addr=0x1400000 count=0x145 incr=0x1000 flags=0x600000000000077
+amdgpu_vm_cpu_update p=0xffff880731f83be0 bo=0xffff8800799e0000 pe=0xfb0 addr=0x317000 count=0x1 incr=0x0 flags=0x1 
+<==root pd
+*/
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+probe funcs = module(@amdgpu).function("kfd_ioctl_map_memory_to_gpu"),
+module(@amdgpu).function("amdgpu_amdkfd_gpuvm_map_memory_to_gpu"),
+module(@amdgpu).function("update_gpuvm_pte.isra.7"),
+module(@amdgpu).function("amdgpu_vm_bo_update"),
+module(@amdgpu).function("amdgpu_vm_bo_update_mapping"),
+module(@amdgpu).function("amdgpu_vm_update_ptes"),
+module(@amdgpu).function("amdgpu_vm_cpu_update")
+{}
+
+probe module(@amdgpu).function("kfd_ioctl_map_memory_to_gpu"){printf("\n\n")}
+probe funcs.call{printf("%s %s\n", probefunc(),$$parms)}
+

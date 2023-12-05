@@ -1,0 +1,34 @@
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+probe module(@amdgpu).statement("amdgpu_vm_bo_split_mapping@amdgpu_vm.c:1595").nearest
+{
+   printf("===============================================\n")
+   if ($mem) {
+        if ($mem->mem_type == 0){
+            printf("SYSTEM\n");
+        } else if ($mem->mem_type == 1){
+            printf("GTT\n");
+        } else if ($mem->mem_type == 2){
+            printf("VRAM\n");
+        } 
+   }
+}
+probe module(@amdgpu).function("amdgpu_vm_bo_update_mapping"),
+module(@amdgpu).function("amdgpu_vm_cpu_update")
+{
+    //va_start = $start*4096
+    //va_end   = ($last + 1)*4096
+    //printf("0x%x -- 0x%x addr:0x%x dma_addr:0x%x flags:%x \n", va_start, va_end, $addr, $pages_addr, $flags)
+    printf("%s %s\n", probefunc(), $$parms)
+}
+probe kprobe.module(@amdgpu).function("amdgpu_gmc_set_pte_pde")
+{
+    gpu_page_idx = u32_arg(3)
+    addr  = u64_arg(4)
+    flags = u64_arg(5)
+    //valid pte
+    if (flags & 1) {
+       printf("idx: %d, phy addr:0x%0x, flags: 0x%0x\n", gpu_page_idx, addr, flags);   
+    }
+}

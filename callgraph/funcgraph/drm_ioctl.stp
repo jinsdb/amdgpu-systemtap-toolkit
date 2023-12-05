@@ -1,0 +1,54 @@
+#!/usr/bin/env stap
+#stap drm_ioctl.stp -DSTP_NO_OVERLOAD
+
+global start = 0
+
+function trace(entry_p, extra) {
+    space_cnt = thread_indent_depth(entry_p)
+    if (entry_p>0) {
+        printf("%-*s%s(%s)%s\n",
+             space_cnt,"",
+             ppfunc(),
+             extra,
+            " {")
+    } else {
+        printf("%-*s%s %s\n",
+              space_cnt, "",
+             "}",
+            extra)
+    }
+}
+
+probe drm_funcs =  module("drm").function("*") {} 
+            //module("drm_kms_helper").function("*"),
+            //module("gpu-sched").function("*"),
+            //module("amdgpu").function("*") {}
+            //module("amdkcl").function("*"),
+            //module("amdttm").function("*") {}
+
+probe module("drm").function("drm_ioctl")
+{
+    trace(4, $$parms)
+    start = 1
+}
+
+probe module("drm").function("drm_ioctl").return
+{
+    trace(-4, $$return)
+    start = 0
+}
+
+probe drm_funcs.call {
+    if (start) {
+        trace(4, $$parms)
+    }
+}
+
+probe drm_funcs.return {
+    if (start) {
+        trace(-4, $$return)
+    }
+}
+
+probe begin{printf("Begin to collect drm_ioctl funcgraph...\n")}
+

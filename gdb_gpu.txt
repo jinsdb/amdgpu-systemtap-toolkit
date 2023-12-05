@@ -1,0 +1,44 @@
+1. dump ring:
+x/512x mgpu_info->gpu_ins[0].adev->rings[12].ring
+find mgpu_info->gpu_ins[0].adev->rings[12].ring, +4096, 0x528
+
+2. dump gart table:
+x/256x mgpu_info->gpu_ins[0].adev->gart->ptr
+umr -i 1 -vr 0@0x8000000000 1024|hexdump
+
+3. dump ih ring:
+x/64x mgpu_info->gpu_ins[0].adev->irq.ih.ring
+set ring_index = mgpu_info->gpu_ins[0].adev->irq.ih.rptr >> 2
+x/8x mgpu_info->gpu_ins[0].adev->irq.ih.ring[ring_index]
+
+4. register base:
+p/x GC_BASE.instance[0]
+p/x HDP_BASE.instance[0]
+p/x DF_BASE.instance[0]
+p/x MMHUB_BASE.instance[0]
+p/x MP0_BASE.instance[0]
+p/x MP1_BASE.instance[0]
+p/x NBIO_BASE.instance[0]
+p/x SDMA0_BASE.instance[0]
+p/x SDMA1_BASE.instance[0]
+p/x UMC_BASE.instance[0]
+
+5. CP Hang:
+umr -i 1 -O bits -r vega20.gfx90.mmGRBM_STATUS2
+
+6. dyndbg
+echo -n 'module amdgpu +p' > /sys/kernel/debug/dynamic_debug/control
+echo -n 'file kfd_chardev.c +p' > /sys/kernel/debug/dynamic_debug/control
+echo -n 'file kfd_chardev.c line 253 +p' > /sys/kernel/debug/dynamic_debug/control
+echo -n "func print_queue +p; func print_queue_properties +p" > /sys/kernel/debug/dynamic_debug/control
+输出模块名，函数名，行号，线程ID等信息
+echo -n 'file kfd_chardev.c +flmtp' > /sys/kernel/debug/dynamic_debug/control
+
+7.gdb hexdump
+define hexdump
+dump memory /tmp/1 $arg0 ($arg0)+($arg1)
+shell hexdump -C /tmp/1
+end
+
+
+

@@ -1,0 +1,105 @@
+global hsa_lock_tm
+global Kmt_Register_tm
+global Kmt_MapMem_tm
+global Kmt_MapMemToGPU_tm
+global fmm_maptogpu_tm
+
+probe process("/opt/rocm/lib/libhsa-runtime64.so.1").function("hsa_amd_memory_lock_to_pool").return{
+    size = @entry(ulong_arg(2))
+    hsa_lock_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("hsaKmtRegisterMemoryWithFlags").return{
+    size = @entry(ulong_arg(2))
+    Kmt_Register_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("hsaKmtMapMemoryToGPUNodes").return {
+    size = @entry(ulong_arg(2))
+    Kmt_MapMem_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("hsaKmtMapMemoryToGPU").return {
+    size = @entry(ulong_arg(2))
+    Kmt_MapMemToGPU_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+
+probe process("/opt/rocm/lib/libhsakmt.so.1").function("fmm_map_to_gpu_nodes").return {
+    size = @entry(ulong_arg(2))
+    fmm_maptogpu_tm[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+global alloc_mem_tm
+global map_mem_to_gpu
+global vm_map_mem_to_gpu
+probe module("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko").function("kfd_ioctl_alloc_memory_of_gpu").return
+{
+    gargs = &@cast(@entry($data), "struct kfd_ioctl_alloc_memory_of_gpu_args")
+    alloc_mem_tm[gargs->size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+probe module("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko").function("kfd_ioctl_map_memory_to_gpu").return
+{
+    args = &@cast(@entry($data), "struct kfd_ioctl_map_memory_to_gpu_args")
+    hnd = args->handle
+    map_mem_to_gpu[hnd] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+probe module("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko").function("amdgpu_amdkfd_gpuvm_map_memory_to_gpu").return
+{
+    size = @entry($mem->bo->tbo->mem->size)
+    size = size*(1 + @entry($mem->aql_queue))
+    vm_map_mem_to_gpu[size] <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+probe end {
+    printf("\nkfd_ioctl_alloc_memory_of_gpu spent time:\n")
+    foreach(sz in alloc_mem_tm) {
+        printf("memsz: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        sz, @count(alloc_mem_tm[sz]), @min(alloc_mem_tm[sz]), @max(alloc_mem_tm[sz]), @avg(alloc_mem_tm[sz]))
+    }
+    
+    printf("\nkfd_ioctl_map_memory_to_gpu spent time:\n")
+    foreach(hnd in map_mem_to_gpu) {
+        printf("hnd: %lx, count:%d, min: %d, max: %d, avg: %d\n", 
+        hnd, @count(map_mem_to_gpu[hnd]), @min(map_mem_to_gpu[hnd]), @max(map_mem_to_gpu[hnd]), @avg(map_mem_to_gpu[hnd]))
+    }
+    
+    printf("\namdgpu_amdkfd_gpuvm_map_memory_to_gpu spent time:\n")
+    foreach(size in vm_map_mem_to_gpu) {
+        printf("memsz: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        size, @count(vm_map_mem_to_gpu[size]), @min(vm_map_mem_to_gpu[size]), @max(vm_map_mem_to_gpu[size]), @avg(vm_map_mem_to_gpu[size]))
+    }
+}
+
+probe end{
+    printf("\nhsa_amd_memory_lock_to_pool spent time:\n")
+    foreach(sz in hsa_lock_tm) {
+        printf("memsz: %d, count: %d, min: %d, max: %d, avg: %d\n", 
+        sz, @min(hsa_lock_tm[sz]), @count(hsa_lock_tm[sz]),@max(hsa_lock_tm[sz]), @avg(hsa_lock_tm[sz]))
+    }
+    
+    printf("\nhsaKmtRegisterMemoryWithFlags spent time:\n")
+    foreach(sz in Kmt_Register_tm) {
+        printf("memsz: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        sz, @count(Kmt_Register_tm[sz]), @min(Kmt_Register_tm[sz]), @max(Kmt_Register_tm[sz]), @avg(Kmt_Register_tm[sz]))
+    }
+    
+    printf("\nhsaKmtMapMemoryToGPUNodes spent time:\n")
+    foreach(sz in Kmt_MapMem_tm) {
+        printf("memsz: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        sz, @count(Kmt_MapMem_tm[sz]), @min(Kmt_MapMem_tm[sz]), @max(Kmt_MapMem_tm[sz]), @avg(Kmt_MapMem_tm[sz]))
+    }
+    
+    printf("\nhsaKmtMapMemoryToGPU spent time:\n")
+    foreach(sz in Kmt_MapMemToGPU_tm) {
+        printf("memsz: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        sz, @count(Kmt_MapMemToGPU_tm[sz]), @min(Kmt_MapMemToGPU_tm[sz]), @max(Kmt_MapMemToGPU_tm[sz]), @avg(Kmt_MapMemToGPU_tm[sz]))
+    }
+    
+    printf("\nfmm_map_to_gpu_nodes spent time:\n")
+    foreach(sz in fmm_maptogpu_tm) {
+        printf("memsz: %d, count:%d, min: %d, max: %d, avg: %d\n", 
+        sz, @count(fmm_maptogpu_tm[sz]), @min(fmm_maptogpu_tm[sz]), @max(fmm_maptogpu_tm[sz]), @avg(fmm_maptogpu_tm[sz]))
+    }
+}

@@ -1,0 +1,107 @@
+#!/usr/bin/env stap
+#stap ucallgraph_mt.stp -DSTP_NO_OVERLOAD -DMAXSKIPPED=100000 -DMAXMAPENTRIES=10000 -DMAXACTION=10000 -w -d ./dcudgemm_stress.out --ldd -c './dcudgemm_stress.out 1 576 576 576' -o dgemm.log
+
+/*
+* trace_tid: default -1 is multithread mode,
+* In single threaded mode, will be init in func_enter with tid()
+*/
+global trace_tid = -1
+
+global parent[100000]
+global call_graph[100000]
+
+global _indent_counters
+function _thread_indent:long (delta)
+{
+    # pre-increment for positive delta and post-decrement for negative delta
+    x = _indent_counters[tid()] + (delta < 0 ? delta : 0)
+    _indent_counters[tid()] += delta
+    return (x>0 ? x : 0)
+}
+
+function print_header()
+{
+	printf("digraph G{\n")
+	printf("\trankdir=TB;\n")
+	printf("\tsize=\"1920,1080\"\n");
+	printf("\tnode [fontsize=12,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box height=.3 ordering=out];\n")
+}
+
+function trace() 
+{
+    if (trace_tid == -1 || trace_tid == tid()) {
+        /* FIX: 
+         * 1. check hole chain: a -> b ... c -> d, b -> c is miss due to some std lib 
+         * 2. sometimes a -> b, b - >c , ustack(1) will become a -> b, a - >c
+         */
+        #try{ parent = usymname(ustack(1)) }catch{ parent = "unkown"}
+        depth = _thread_indent(1)
+        pfunc = parent[tid(), depth]
+        call_graph[tid(), pfunc, probefunc()]++
+        parent[tid(), depth + 1] = probefunc() //next low level parent
+    }
+}
+probe sshd_funcs = process("/usr/sbin/sshd").function("*"),
+              process("/usr/lib64/security/*.so").function("*"){}
+
+probe hsa_kmt_funcs = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("*"),
+	          process("/opt/rocm/lib/libhsakmt.so.1").function("*"){}
+
+probe rocm_funcs = process("/opt/rocm/lib/libhc_am.so.3").function("*"),
+        process("/opt/rocm/lib/libmcwamp.so.3").function("*"),
+        process("/opt/rocm/lib/libhip_hcc.so.3").function("*"),
+        process("/opt/rocm/lib/libhsa-runtime64.so.1").function("*"),
+        process("/opt/rocm/lib/librocblas.so").function("*"),
+        process("/opt/rocm/lib/libamd_comgr.so.1").function("*"),
+        process("/opt/rocm/lib/libhsakmt.so.1").function("*"),
+        process("/opt/rocm/hsa/lib/libhsa-ext-image64.so.1").function("*"),
+        process("/root/mengzhi/dgemm_scard_nobind/dcudgemm_stress.out").function("*")
+{}
+
+probe rocm_funcs 
+{
+     trace()
+}
+
+probe rocm_funcs.return
+{
+    depth = _thread_indent(-1)
+    #delete parent[tid(), depth]
+}
+
+/*          
+probe func_enter = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("hsa_init") {}
+probe func_exit = process("/opt/rocm/hsa/lib/libhsa-runtime64.so.1.1.9").function("hsa_init").return{}
+probe func_enter
+{
+     if (trace_tid == -1) {
+         trace_tid = tid()
+         trace()
+     }
+
+}
+probe func_exit
+{
+    if (trace_tid == tid()) {
+        trace_tid = -1
+        exit()
+    }
+
+}
+*/
+
+probe end
+{
+    thrid = 0
+    foreach([t+, caller, func] in call_graph) {
+        if (thrid != t) {
+            if (thrid != 0){
+                printf("}\n")
+            }
+            print_header()
+            thrid = t
+        }
+        printf("\"%s\"->\"%s\";\n", caller, func)
+    }
+    printf("}\n")
+}

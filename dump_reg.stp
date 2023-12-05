@@ -1,0 +1,127 @@
+#DWORD REG
+@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/hydcu.ko"%)
+
+global mmio_reg
+global pcie_reg
+global gc_cac_rreg
+global se_cac_rreg
+
+function print_fmt(reg, val, op, op_func)
+{
+    printf("{0x%08x, 0x%08x, \"%s\", \"%s\"},\n", reg, val, op, op_func)
+}
+
+//-------------- mmio reg ------------------------
+probe module(@amdgpu).function("amdgpu_mm_rreg")
+{
+    mmio_reg[tid()] = $reg
+}
+
+probe module(@amdgpu).function("amdgpu_mm_rreg").return 
+{
+    #printf("mmio rreg:0x%x, retval: 0x%x\n", mmio_reg[tid()], $return)
+    print_fmt(mmio_reg[tid()], $return, "r", "amdgpu_mm_rreg")
+    delete mmio_reg[tid()]
+}
+
+probe module(@amdgpu).function("amdgpu_mm_wreg") 
+{
+    #printf("mmio wreg:0x%x, value: 0x%x\n", $reg, $v)
+    print_fmt($reg, $v, "w", "amdgpu_mm_wreg")
+}
+
+//------------ pcie reg ----------------------------
+probe module(@amdgpu).function("soc15_pcie_rreg")
+{
+    pcie_reg[tid()] = $reg/4
+}
+
+probe module(@amdgpu).function("soc15_pcie_rreg").return
+{
+    #printf("pcie rreg:0x%x, retval: 0x%x\n", pcie_reg[tid()], $return)
+    print_fmt(pcie_reg[tid()], $return, "r", "soc15_pcie_rreg")
+    delete pcie_reg[tid()]
+}
+
+probe module(@amdgpu).function("soc15_pcie_wreg")
+{
+    #printf("pcie wreg:0x%x, value: 0x%x\n", $reg, $v)
+     print_fmt($reg/4, $v, "w", "soc15_pcie_wreg")
+}
+
+//------------ gc cac reg ----------------------------
+probe module(@amdgpu).function("soc15_gc_cac_rreg")
+{
+    gc_cac_rreg[tid()] = $reg/4
+}
+
+probe module(@amdgpu).function("soc15_gc_cac_rreg").return
+{
+    #printf("gc rreg:0x%x, retval: 0x%x\n", gc_cac_rreg[tid()], $return)
+    print_fmt(gc_cac_rreg[tid()], $return, "r", "soc15_gc_cac_rreg")
+    delete gc_cac_rreg[tid()]
+}
+
+probe module(@amdgpu).function("soc15_gc_cac_wreg")
+{
+    #printf("gc wreg:0x%x, value: 0x%x\n", $reg, $v)
+     print_fmt($reg/4, $v, "w", "soc15_gc_cac_wreg")
+}
+
+//------------ se cac reg ----------------------------
+probe module(@amdgpu).function("soc15_se_cac_rreg")
+{
+    se_cac_rreg[tid()] = $reg/4
+}
+
+probe module(@amdgpu).function("soc15_se_cac_rreg").return
+{
+    #printf("se rreg:0x%x, retval: 0x%x\n", se_cac_rreg[tid()], $return)
+     print_fmt(se_cac_rreg[tid()], $return, "r", "soc15_se_cac_rreg")
+    delete se_cac_rreg[tid()]
+}
+
+probe module(@amdgpu).function("soc15_se_cac_wreg")
+{
+    #printf("se wreg:0x%x, value: 0x%x\n", $reg, $v)
+     print_fmt($reg/4, $v, "w", "soc15_se_cac_wreg")
+}
+
+
+probe begin{
+    prefix = "#include <stdio.h>\n"
+    prefix .= "#include <stdlib.h>\n"
+    prefix .= "#include <string.h>\n"
+    prefix .= "typedef unsigned int uint32_t;\n"
+    prefix .= "#include \"chip_lookup.h\"\n"
+    prefix .= "typedef struct regdesc{\n"
+    prefix .= "uint32_t reg;\n"
+    prefix .= "uint32_t value;\n"
+    prefix .= "char op[2];\n"
+    prefix .= "char name[32];\n"
+    prefix .= "}regdesc_t;"   
+    printf("%s\nregdesc_t amdgpu_reg_list[] = {\n", prefix)
+}
+
+probe end{
+    postfix = "int main(){\n"
+    postfix .= "int i,j;\n"
+    postfix .= "int regnum = sizeof(amdgpu_reg_list)/sizeof(regdesc_t);\n"
+    postfix .= "int namenum = sizeof(sRegNames)/sizeof(LOOKUP_REG_NAMES);\n"
+    postfix .= "char *name = \"Unkown\";\n" 
+    postfix .= "for (i = 0; i < regnum; i++) {\n"
+    postfix .= "name = \"Unkown\";\n"
+    postfix .= "for(j = 0; j < namenum; j++) {\n"
+    postfix .= "if (sRegNames[j].ulRegIndex == amdgpu_reg_list[i].reg){\n"
+    postfix .= "     name = sRegNames[j].cRegName;\n"
+    postfix .= "   }\n"
+    postfix .= "}\n"
+    postfix .= "printf(\"%s, %s, 0x%x, 0x%x\\n\", name, \n"
+    postfix .= " amdgpu_reg_list[i].op, amdgpu_reg_list[i].reg, amdgpu_reg_list[i].value);\n"
+    postfix .= "}\n" 
+    postfix .= "return 0;\n"
+    postfix .= "}\n"
+    printf("};\n")
+    printf("%s\n", postfix)
+  
+}

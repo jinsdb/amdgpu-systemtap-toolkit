@@ -1,0 +1,53 @@
+/*
+stap -vv rocm-dot.stp 
+-d /root/jiahan/rocm2.4/umd_lib/lib/libamdocl64.so \
+-d /root/yuanxiong/helloworld/helloworld \
+-d /usr/lib64/libpthread-2.17.so \
+-d /root/jiahan/rocm2.4/umd_lib/lib/libOpenCL.so.1 \
+-d /opt/rocm/hsa/lib/libhsa-ext-image64.so.1.1.9 \
+-d /usr/lib64/ld-2.17.so\
+-d /usr/lib64/libc-2.17.so -o hello.log
+
+cat hello.log|c++filt -pi
+
+stap -vve 'probe process("/root/yuanxiong/helloworld/helloworld").function("*")
+{
+  try{printf("%s -> %s\n", usymname(ustack(1)),probefunc())}catch{}
+}' -ldd
+
+*/
+
+probe funcs=process("/opt/rocm/lib64/libhsakmt.so.1").function("*"),
+            process("/opt/rocm/lib/libhsa-runtime64.so.1").function("*")
+{}
+            
+probe begin{
+   header="digraph G{
+	rankdir=LR;
+	size=\"1920,1080\"
+	node [fontsize=16,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box];"
+    
+    printf("%s\n", header)
+   
+}
+
+
+
+probe funcs.call
+{
+  try{
+     parent = usymname(ustack(1))
+  }catch{
+     parent = ""
+  }
+  
+  printf("\"%s\" -> \"%s\";\n", parent, probefunc())
+  
+}
+
+probe end{
+   printf("}\n")
+}
+
+
+

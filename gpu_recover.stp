@@ -1,0 +1,127 @@
+#!/usr/bin/env stap
+#stap -g callgraph.stp -DSTP_NO_OVERLOAD
+
+@define amdgpu %("amdgpu"%)
+@define amdttm %("amdttm"%)
+#@define ttm %("ttm"%)
+@define funcenter %(module(@amdgpu).function("*").call, module(@amdttm).function("*").call%)
+global start = 0
+global last_depth = 0
+global nodename
+global thread_tid = -1
+global last_func
+global last_print_func
+global last_print_depth
+
+@__private30 global _indent_counters
+
+@__private30 function my_thread_indent_depth:long (delta)
+{
+    # pre-increment for positive delta and post-decrement for negative delta
+    x = _indent_counters[tid()] + (delta < 0 ? delta : 0)
+    _indent_counters[tid()] += delta
+
+    return (x>0 ? x : 0)
+
+}
+
+function trace(entry_p, enter) {
+    depth = my_thread_indent_depth(entry_p)
+    if (enter > 0) {
+        nodename[depth] = ppfunc()
+    }
+    
+    if ((depth > 0) && (enter > 0)) {
+        /* avoid dupcation func call in for loop */
+        if ((last_func == nodename[depth])||
+            (ppfunc() == "amdgpu_mm_wreg")|| /* blacklist */
+            (ppfunc() == "amdgpu_mm_rreg")||
+            (ppfunc() == "sdma_v4_0_get_reg_offset")||
+            (ppfunc() == "gfx_v9_0_select_se_sh")) {
+             ;
+        } else {
+            if ((last_print_depth == depth) && (last_print_func  = nodename[depth])) {
+		       ;
+            } else {
+                printf("\t\"%s\" -> \"%s\";\n", nodename[depth - entry_p], nodename[depth]);
+                last_print_depth = depth
+                last_print_func  = nodename[depth]
+            }
+            
+        }
+        
+        last_depth = depth
+        last_func = ppfunc()
+        
+	}
+}
+
+/*
+#with -g
+
+%{
+char *dot_header = "digraph G{\n\
+\trankdir=TB;\n\
+\tsize=\"1920,1080\";\n\
+\tnode [fontsize=16,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box];";
+%}
+
+probe begin{printf("%s\n",kernel_string(%{dot_header%}))}
+
+*/
+
+probe begin{
+    printf("digraph G{\n")
+	printf("\trankdir=LR;\n")
+	printf("\tsize=\"1920,1080\"\n");
+	printf("\tnode [fontsize=16,fontcolor=blue,style=filled,fillcolor=Wheat,shape=box];\n")
+}
+
+probe module(@amdgpu).function("*").call,
+      module(@amdttm).function("*").call {
+	  
+    if ((start == 1) && (thread_tid == tid()) &&
+        (!%{in_interrupt()%})) {	
+        trace(1, 1)
+    }
+}
+
+probe module(@amdgpu).function("*").return,
+      module(@amdttm).function("*").return{ 
+      if ((start == 1) && (thread_tid == tid()) && 
+          (!%{in_interrupt()%})) {
+	      trace(-1, 0)
+      }
+}
+
+/*
+* inject recover..., "./kfdtest --gtest_filter=KFDQMTest.*"
+* command lead the recover flow.
+*/
+probe module(@amdgpu).function("unmap_queues_cpsch").return {
+   if (reset_cnt == 0) {
+       $return = 1
+       reset_cnt = reset_cnt + 1
+   }
+}
+
+probe module(@amdgpu).function("amdgpu_device_gpu_recover") {
+    if (start == 0 && thread_tid == -1) {
+        start = 1
+        thread_tid = tid()
+        trace(1, 1)
+    }
+}
+
+probe module(@amdgpu).function("amdgpu_device_gpu_recover").return {
+  
+    if (start == 1) {
+        start = 0
+        trace(-1, 0)
+    }
+
+}
+
+probe end{printf("}\n")}
+
+

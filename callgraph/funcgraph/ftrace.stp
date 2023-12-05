@@ -1,0 +1,90 @@
+#!/bin/stap
+
+global va = 0
+probe module("hydcu").function("amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu")
+{
+    # Is doorbell
+    if ($flags & (1 << 3)) {
+        phyaddr = @cast($offset,"uint64_t")[0]
+        if ((phyaddr >= 0x44000000000) && (va == 0)) {
+            va = $va
+            printf("alloc doorbell memory, va: %p, phy addr: %p\n", va, phyaddr);
+            trace_onoff(1, tid())
+        }
+    }
+}
+
+probe module("hydcu").function("amdgpu_amdkfd_gpuvm_map_memory_to_gpu").return
+{
+    if (va == @entry($mem->va)) {
+        printf("stop ftrace graph\n")
+        trace_onoff(0, tid())
+        va = 0
+    }
+}
+
+
+function trace_on(val:long)
+%{
+    if (STAP_ARG_val) {
+        tracing_on();
+    } else {
+        tracing_off();
+    }
+%}
+
+function trace_onoff(enable:long, ftrace_pid:long)
+{
+    if (enable) {
+        if (ftrace_pid) {
+            cmd = sprintf("echo %d > /sys/kernel/debug/tracing/set_ftrace_pid", ftrace_pid)
+            system(cmd);
+        }
+        trace_on(1)
+    } else {
+        trace_on(0)
+    }
+}
+
+function ftrace_graph(funcs:string)
+{
+   trace_on(0)
+   
+   #function graph setting
+   system("echo function_graph > /sys/kernel/debug/tracing/current_tracer")
+   
+   #Output text formart setting
+   system("echo nofuncgraph-duration > /sys/kernel/debug/tracing/trace_options")
+   system("echo nofuncgraph-proc > /sys/kernel/debug/tracing/trace_options")
+   system("echo nofuncgraph-abstime > /sys/kernel/debug/tracing/trace_options")
+   
+   #Hit funcs, outpu stack trace
+   cmd = sprintf("echo '%s:stacktrace:1' > /sys/kernel/debug/tracing/set_ftrace_filter", funcs);
+   system(cmd)
+   
+   #Trace functin
+   cmd = sprintf("echo %s > /sys/kernel/debug/tracing/set_graph_function", funcs);
+   system(cmd)
+   
+   #Output
+   system("cat /sys/kernel/debug/tracing/trace_pipe")
+   
+   printf("Tracing \"%s\"... Ctrl-C to end\n", funcs)
+}
+
+probe begin
+{
+   ftrace_graph("amdgpu_amdkfd_gpuvm_map_memory_to_gpu")
+}
+
+probe end {
+   trace_on(0)
+   system("echo nop > /sys/kernel/debug/tracing/current_tracer")
+   system("echo > /sys/kernel/debug/tracing/set_ftrace_filter")
+   system("echo > /sys/kernel/debug/tracing/set_graph_function")
+   system("echo > /sys/kernel/debug/tracing/set_ftrace_pid")
+   system("echo funcgraph-duration > /sys/kernel/debug/tracing/trace_options")
+   
+   system(sprintf("kill -USR2 %d", stp_pid()))
+}
+

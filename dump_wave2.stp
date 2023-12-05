@@ -1,0 +1,224 @@
+# stap -vv dump_wave.stp -g -DSTP_NO_OVERLOAD
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+//@define amdgpu %("/lib/modules/3.10.0-957.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+global mc_addr_is_fault = 0
+global stat_cus
+
+%{
+/*
+struct amdgpu_gpu_instance
+{
+    void *adev;
+    int  mgpu_fan_enabled;
+};
+struct amdgpu_mgpu_info
+{
+   struct amdgpu_gpu_instance	gpu_ins[16];
+};
+*/
+int dump_invalid_only = 1;
+typedef void (*pfn_amdgpu_mm_wreg_t)(void *adev, uint32_t reg, uint32_t v, uint32_t acc_flags);
+typedef uint32_t (*pfn_amdgpu_mm_rreg_t)(void *adev, uint32_t reg, uint32_t acc_flags);
+typedef void (*pfn_select_se_sh)(void *adev, u32 se_num, u32 sh_num, u32 instance); 
+
+pfn_amdgpu_mm_wreg_t  pamdgpu_mm_wreg = NULL;
+pfn_amdgpu_mm_rreg_t  pamdgpu_mm_rreg = NULL;
+pfn_select_se_sh pselect_se_sh = NULL;
+void *g_adev = NULL;
+
+#define mmSQ_IND_INDEX       0x0378
+#define mmSQ_IND_DATA        0x0379
+#define mmSQ_IND_INDEX_BASE_IDX 0
+#define mmSQ_IND_DATA_BASE_IDX  0
+
+
+#define SQ_IND_INDEX__WAVE_ID__SHIFT   0x0
+#define SQ_IND_INDEX__SIMD_ID__SHIFT   0x4
+#define SQ_IND_INDEX__INDEX__SHIFT     0x10
+#define SQ_IND_INDEX__FORCE_READ_MASK  0x00002000L
+
+
+#define WREG32_W(reg, v) pamdgpu_mm_wreg(adev, (reg), (v), 0)
+#define RREG32_R(reg)    pamdgpu_mm_rreg(adev, (reg), 0)
+
+/*
+#define WREG32_SOC15_GC(reg, value) \
+	WREG32_W((adev->reg_offset[1][0][reg##_BASE_IDX] + reg), value)
+#define RREG32_SOC15_GC(reg) \
+	RREG32_R(adev->reg_offset[1][0][reg##_BASE_IDX] + reg)
+*/
+
+#define WREG32_SOC15_GC(reg, value) \
+	WREG32_W((0x2000 + reg), value)
+#define RREG32_SOC15_GC(reg) \
+	RREG32_R(0x2000 + reg)
+ 
+#define SQ_WAVE_TRAPSTS_MEM_VIOL(x) (((x) >> 0x8) & 0x1)
+
+#define ixSQ_WAVE_STATUS  0x0012
+#define ixSQ_WAVE_TRAPSTS 0x0013
+#define ixSQ_WAVE_HW_ID   0x0014
+#define ixSQ_WAVE_PC_LO   0x0018
+#define ixSQ_WAVE_PC_HI   0x0019
+#define ixSQ_WAVE_M0      0x027c
+#define ixSQ_WAVE_EXEC_LO 0x027e
+#define ixSQ_WAVE_EXEC_HI 0x027f
+
+
+
+//#include <amdgpu.h>
+
+static uint32_t wave_read_ind(void *adev, uint32_t simd, uint32_t wave, uint32_t address)
+{
+	WREG32_SOC15_GC(mmSQ_IND_INDEX,
+		(wave << SQ_IND_INDEX__WAVE_ID__SHIFT) |
+		(simd << SQ_IND_INDEX__SIMD_ID__SHIFT) |
+		(address << SQ_IND_INDEX__INDEX__SHIFT) |
+		(SQ_IND_INDEX__FORCE_READ_MASK));
+	return RREG32_SOC15_GC(mmSQ_IND_DATA);
+}
+
+%}
+
+//function dump_wave:long(adev:long, select:long,
+function dump_wave:long(
+                   se:long, sh:long, cu:long, simd:long, wave:long)
+%{
+    uint32_t qid = 0;
+    uint32_t trapsts = 0;
+    uint64_t pc_low = 0, pc_high = 0;
+    uint64_t pc_val = 0;
+    uint32_t hw_id = 0;
+    uint32_t status = 0, m0 = 0;
+    uint64_t exec_low = 0, exec_high = 0, exec = 0;
+    int32_t ret = -1;
+    int32_t wave_halt = 0;
+    int32_t vmid = 0;
+      
+    pfn_select_se_sh select_func = NULL;
+    
+    //select_func = (pfn_select_se_sh)STAP_ARG_select;
+    select_func = pselect_se_sh;
+    select_func((void*)g_adev, STAP_ARG_se, STAP_ARG_sh, STAP_ARG_cu);
+    
+    trapsts = wave_read_ind((void*)g_adev, STAP_ARG_simd, 
+                                   STAP_ARG_wave, ixSQ_WAVE_TRAPSTS);
+    wave_halt = (SQ_WAVE_TRAPSTS_MEM_VIOL(trapsts)); 
+   
+    pc_low = wave_read_ind((void*)g_adev,
+                    STAP_ARG_simd, STAP_ARG_wave, ixSQ_WAVE_PC_LO);
+    pc_high = wave_read_ind((void *)g_adev, 
+                    STAP_ARG_simd, STAP_ARG_wave, ixSQ_WAVE_PC_HI);                  
+    pc_val = ((pc_high << 32)|pc_low);  
+        
+    hw_id   = wave_read_ind((void*)g_adev, STAP_ARG_simd, 
+                                STAP_ARG_wave, ixSQ_WAVE_HW_ID);  
+                                
+    exec_low = wave_read_ind((void*)g_adev,
+                    STAP_ARG_simd, STAP_ARG_wave, ixSQ_WAVE_EXEC_LO);
+    exec_high = wave_read_ind((void *)g_adev, 
+                    STAP_ARG_simd, STAP_ARG_wave, ixSQ_WAVE_EXEC_HI);
+    exec = ((exec_high << 32)|exec_low);  
+    if (exec == 0 || (dump_invalid_only && wave_halt == 0)) {
+              select_func((void*)g_adev, 0xFFFFFFFF,0xFFFFFFFF, 0xFFFFFFFF);
+              STAP_RETURN(ret);
+
+    }       
+ 
+    status = wave_read_ind((void *)g_adev, 
+                    STAP_ARG_simd, STAP_ARG_wave, ixSQ_WAVE_STATUS);
+    m0 = wave_read_ind((void *)g_adev, 
+                    STAP_ARG_simd, STAP_ARG_wave, ixSQ_WAVE_M0);
+        
+    qid = ((hw_id >> 24)&0x7);
+    vmid = ((hw_id >> 20)&0xf);
+    _stp_printf("se: %d, sh: %d, cu: %d, simd: %d, wave: %d, qid:%d, vmid:%d "
+               "wavefront in @PC: 0x%lx\n", 
+               STAP_ARG_se, STAP_ARG_sh, 
+               STAP_ARG_cu, STAP_ARG_simd, 
+               STAP_ARG_wave, qid, vmid,
+               pc_val
+              );
+    _stp_printf("   EXEC: 0x%016x\n", exec);
+    _stp_printf(" STATUS: 0x%08x\n", status);
+    _stp_printf("TRAPSTS: 0x%08x, halt: %d\n", trapsts, wave_halt);
+    _stp_printf("     M0: 0x%08x\n", m0);
+    _stp_printf("   HWID: 0x%08x\n", hw_id);
+    ret = 0;
+        
+    select_func((void*)g_adev, 0xFFFFFFFF,0xFFFFFFFF, 0xFFFFFFFF);
+    STAP_RETURN(ret);
+%}
+
+function init_reg_ops:long()
+%{
+    struct amdgpu_mgpu_info *pminfo = NULL;
+    pamdgpu_mm_wreg = (pfn_amdgpu_mm_wreg_t)kallsyms_lookup_name("amdgpu_mm_wreg");
+    pamdgpu_mm_rreg = (pfn_amdgpu_mm_rreg_t)kallsyms_lookup_name("amdgpu_mm_rreg");
+    pselect_se_sh = (pfn_select_se_sh)kallsyms_lookup_name("gfx_v9_0_select_se_sh"); 
+    pminfo = (struct amdgpu_mgpu_info*)kallsyms_lookup_name("mgpu_info"); 
+    if (pamdgpu_mm_wreg == NULL || pamdgpu_mm_rreg == NULL ||
+         pselect_se_sh == NULL || pminfo == NULL) {
+        _stp_printf("failed to get pamdgpu_mm_wreg and pamdgpu_mm_rreg function.\n");
+        STAP_RETURN(-1); 
+    }
+    g_adev = pminfo->gpu_ins[0].adev;
+    _stp_printf("amdgpu_mm_wreg: 0x%lx, amdgpu_mm_rreg: 0x%lx\n",
+                 pamdgpu_mm_wreg, pamdgpu_mm_rreg);
+    STAP_RETURN(0); 
+%}
+
+
+probe begin{
+    ret = init_reg_ops()
+    if (ret != 0) {
+        exit()
+    }
+
+    dump_all_wave()    
+}
+
+function dump_all_wave()
+{
+        se = 4  //@entry($adev->gfx->config->max_shader_engines)
+        sh = 1  //@entry($adev->gfx->config->max_sh_per_se)
+        cu = 16 //@entry($adev->gfx->config->max_cu_per_sh)
+        simd = 4 //@entry($adev->gfx->cu_info->simd_per_cu)
+        waves = 8 //@entry($adev->gfx->cu_info->max_waves_per_simd)
+
+        printf("number of se: %d, sh: %d, cu: %d, simd: %d, waves: %d\n",
+                se, sh, cu, simd, waves)
+        for (i = 0; i < se; i++) {
+            for (j = 0; j < sh; j++) {
+                for (k = 0; k < cu; k++) {
+                    for (s = 0; s < simd; s++) {
+                        for ( w = 0; w < waves; w++) {
+                            ret = dump_wave(i, j, k, s, w) 
+                                    //@entry($adev->gfx->funcs->select_se_sh), 
+                                    //  i, j, k, s, w)
+                            if (ret == 0) {
+                              stat_cus[i, j, k]++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+	
+}
+
+probe module(@amdgpu).function("kfd_ioctl"){
+	if (mc_addr_is_fault == 1) {
+		printf("send sig SIGTSTP to pid:%d\n", task_pid(%{current%}))
+		%{send_sig(SIGTSTP, current, 0)%}
+	}
+}
+
+probe end{
+    printf("se     sh     cu     [count]\n")
+    foreach ([se, sh, cu] in stat_cus){
+        printf("%2d     %2d     %2d     %d\n", se, sh, cu, stat_cus[se, sh, cu])
+    }
+}

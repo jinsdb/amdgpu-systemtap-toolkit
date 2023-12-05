@@ -1,0 +1,123 @@
+# 
+/*
+stap mleak.stp -g -DMAXSTRINGLEN=1024 -DMAXMAPENTRIES=10000 -DSTP_NO_OVERLOAD --ldd \
+-d /home/stresstestsuite/build/install/TestSuite/bin/hdpsts
+*/
+# ptr --> bt, , bt --> bytes
+# ptr --> bytes
+#
+global ptr2bt
+global ptr2size
+global bt_stats
+
+
+function is_error:long(value:long)
+%{
+    STAP_RETURN(IS_ERR_VALUE(STAP_ARG_value));
+%}
+
+probe begin {
+    printf("Start tracing. Press Ctrl + C to complete.\n")
+}
+
+#probe process("/lib64/libc.so.6").function("mmap").return{
+#probe syscall.mmap2.return
+probe kernel.function("do_mmap").return
+{
+    if (execname() != "dqst" || @entry($file)) {
+       next
+    }
+    /*
+	ptr = register("ax")
+	if (ptr == -1){
+		next
+    }
+	bytes = @entry(register("si"))
+    */
+    if (is_error($return)) {
+       next
+    }
+    
+    ptr = $return
+    bytes = @entry($len)
+    #bt = ubacktrace()
+    bt = sprint_ubacktrace()
+    ptr2bt[ptr, bytes] = bt
+    ptr2size[ptr] = bytes
+    bt_stats[bt] += bytes
+}
+
+#probe process("/lib64/libc.so.6").function("munmap").return{
+#probe syscall.munmap.return
+probe kernel.function("do_munmap").return
+{
+    if (execname() != "dqst") {
+       next
+    }
+    /*
+    ret = register("ax")
+    if (ret == -1){
+        next
+    }
+    addr = @entry(register("di"))
+    len  = @entry(register("si"))
+    */
+    /*
+    if ($return == -1){
+       next
+    }
+    addr = @entry($addr)
+    len  = @entry($len)
+    */
+    if ($return < 0){
+       next
+    }
+    addr = @entry($start)
+    len  = @entry($len)
+    #printf("unmap addr:%lx,len=%d\n",addr,len)
+    clear_it = 0
+    foreach([ptr, bytes] in ptr2bt) {
+        if ((addr >= ptr) && ((addr + len) <= (ptr + bytes))) {
+            bt = ptr2bt[ptr, bytes]
+            ptr2size[ptr] = -len
+            bt_stats[bt] = -len
+            if (ptr2size[ptr] <= 0) {
+                clear_it = 1
+            }
+            break
+        }
+    }
+    
+    if (clear_it) {
+        delete ptr2bt[ptr, bytes]
+        delete ptr2size[ptr]
+        if (bt_stats[bt] <= 0) {
+           delete bt_stats[bt] 
+        }
+    }
+
+}
+
+probe end{
+    ansi_clear_screen()
+	printf("========================================\n")
+	printf("	memory	leak: \n")
+	printf("========================================\n")
+	foreach (bt in bt_stats) {
+		printf("mmap %d bytes\n", bt_stats[bt])
+		print(bt) #print_usyms(bt)
+		println("\n")
+	}
+}
+
+probe timer.s(10) {
+    ansi_clear_screen()
+    printf("========================================\n")
+	printf("	mmap stats: \n")
+	printf("========================================\n")
+	foreach (bt in bt_stats) {
+		printf("mmap %d bytes\n", bt_stats[bt])
+		print(bt) #print_usyms(bt)
+		println("\n")
+	}
+}

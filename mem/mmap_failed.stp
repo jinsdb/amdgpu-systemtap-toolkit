@@ -1,0 +1,23 @@
+#stap -vvg mmap_failed.stp -DMAXSTRINGLEN=819200 -DSTP_NO_OVERLOAD
+global keystr
+
+probe kernel.statement("do_mmap@*:*") {
+    line = pp()." ".$$vars."\n"
+    keystr[tid()] .= line
+}
+
+function is_error:long(value:long)
+%{
+    STAP_RETURN(IS_ERR_VALUE(STAP_ARG_value));
+%}
+
+probe kernel.function("do_mmap").return
+{
+  if (is_error($return)) {
+    printf("%s do_mmap return: %d\n", execname(), $return)
+    printf("%s\n", keystr[tid()])
+    printf("\n\n\n")
+  }
+  keystr[tid()] = ""
+  delete keystr[tid()]
+}

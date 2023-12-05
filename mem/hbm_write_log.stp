@@ -1,0 +1,75 @@
+
+@define amdgpu %("/lib/modules/3.10.0-693.el7.x86_64/updates/dkms/amdgpu.ko"%)
+
+global pasid
+global paddr
+//global gaddr //gpu address
+
+function gpu_dev_name:string(dev:long)
+%{
+    strlcpy (STAP_RETVALUE, dev_name((const struct device *)STAP_ARG_dev), MAXSTRINGLEN);
+%}
+
+probe module(@amdgpu).function("amdgpu_vm_cpu_update")
+{
+    /*//vmid == 0 only
+    gpu_addr = $bo->tbo->offset
+    if (gpu_addr >= 0x0000800000000000) {
+        gpu_addr = gpu_addr | 0xffff800000000000
+    }
+    gpu_addr += $pe
+    gaddr[tid()] = gpu_addr
+    */
+    
+    pasid[tid()] = $p->vm->pasid
+    paddr[tid()] = $bo->tbo->mem->bus->base + $bo->tbo->mem->bus->offset + $pe
+}
+
+probe module(@amdgpu).function("amdgpu_vm_cpu_update").return
+{
+    pasid[tid()] = 0
+    paddr[tid()] = 0
+}
+
+probe module(@amdgpu).function("amdgpu_gart_bind")
+{
+   /* //vmid == 0
+   gpu_addr = $adev->gart->bo->tbo->offset
+   if (gpu_addr >= 0x0000800000000000) {
+        gpu_addr = gpu_addr | 0xffff800000000000
+   }
+   gaddr[tid()] = gpu_addr
+   */
+   
+   paddr[tid()] = $adev->gart->bo->tbo->mem->bus->base + $adev->gart->bo->tbo->mem->bus->offset
+   
+}
+
+probe module(@amdgpu).function("amdgpu_gart_bind").return
+{
+    paddr[tid()] = 0
+}
+
+probe kprobe.module(@amdgpu).function("amdgpu_gmc_set_pte_pde") {
+    adev = register("rdi")
+    pt_addr = register("rsi")
+    idx     = register("rdx")
+    addr_val = register("rcx")
+    flags    = register("r8")
+
+    dev = kernel_pointer(adev)
+    
+    value = addr_val & 0x0000FFFFFFFFF000
+    value |= flags
+    
+    //g_ptr = gaddr[tid()] + (idx * 8)
+    c_ptr = pt_addr + (idx * 8)
+    p_ptr = paddr[tid()] + (idx * 8)
+    printf("%s(%d) PASID %d %s [%lx/%lx]: 0x%016lx\n", 
+               execname(), tid(), pasid[tid()], gpu_dev_name(dev), c_ptr, p_ptr, value)
+    /*
+    if (pasid[tid()] == 0){
+         print_ksyms(backtrace())
+    }
+    */
+}
